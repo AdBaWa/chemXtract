@@ -1,0 +1,16 @@
+pyproject.toml
+src/model.py
+src/util_functions.py
+src/utils.py
+src/agents/extract_main_data_agent.py
+src/agents/ocr_agent.py
+src/agents/prompts/extract_main_data_prompts.py
+src/docnetagent.egg-info/PKG-INFO
+src/docnetagent.egg-info/SOURCES.txt
+src/docnetagent.egg-info/dependency_links.txt
+src/docnetagent.egg-info/requires.txt
+src/docnetagent.egg-info/top_level.txt
+src/handler/azure_blob_storage_handler.py
+src/handler/azure_ocr_handler.py
+src/handler/cosmos_db_handler.py
+src/handler/ocr_processor_client.py

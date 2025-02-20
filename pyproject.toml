@@ -1,0 +1,25 @@
+[project]
+name = "docnetagent"
+version = "0.1.0"
+description = "A blueprint for an agentnetwork for document information extraction"
+authors = [
+    { name = "Sven Bulach", email = "sven.bulach@prodyna.com" },
+    { name = "Martin Kruse", email = "martin.kruse@prodyna.com" }
+]
+requires-python = ">=3.12"
+
+dependencies = [
+    "pydantic",
+    "langchain",
+    "openai",
+    "python-dotenv",
+    "azure-cosmos",
+    "azure-ai-documentintelligence",
+    "azure-core",
+    "Pillow",
+    "langchain-openai"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

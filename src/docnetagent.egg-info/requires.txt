@@ -1,0 +1,9 @@
+pydantic
+langchain
+openai
+python-dotenv
+azure-cosmos
+azure-ai-documentintelligence
+azure-core
+Pillow
+langchain-openai

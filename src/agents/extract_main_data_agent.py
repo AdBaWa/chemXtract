@@ -1,0 +1,210 @@
+from src.model import ExtractMainDataState, MainInfo
+import json
+from src.utils import llm
+from pydantic import BaseModel, Field
+from typing import Literal
+from langgraph.types import Command
+from src.util_functions import convert_image_to_base64_from_disk
+from langchain_core.output_parsers import JsonOutputParser
+from langgraph.graph import StateGraph, START, END
+from src.agents.prompts.extract_main_data_prompts import (
+    EXTRACT_MAIN_INFO_SYSTEM_PROMPT,
+    EXTRACT_MAIN_INFO_USER_PROMPT,
+    VERIFY_MAIN_INFO_SYSTEM_PROMPT,
+    VERIFY_MAIN_INFO_USER_PROMPT,
+    RETRY_MAIN_INFO_SYSTEM_PROMPT,
+    RETRY_MAIN_INFO_USER_PROMPT,
+)
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+import os
+from src.util_functions import add_file_content_to_messages
+from openai import BadRequestError
+
+class VerifyResult(BaseModel):
+    result: str = Field(
+        description="One of the following options: VERIFIED, CERTAIN, UNSURE, FALSE. Do not write anything else than one of these options."
+    )
+    reason: str = Field(
+        description="If Confidence is 'UNSURE' or 'FALSE', provide a reason. If Confidence is 'VERIFIED' or 'CERTAIN', write 'null'."
+    )
+class MainInfoResult(BaseModel):
+    supplier: str = Field(
+        description="The supplier's name or null if you cannot find any supplier. Do not write anything else than the supplier company name or null."
+    )
+    invoice_number: str = Field(
+        description="The invoice number or null if you cannot find any invoice number. Do not write anything else than the invoice number or null."
+    )
+    invoice_date: str = Field(
+        description="The invoice date or null if you cannot find any invoice date. Do not write the due date. Do not write anything else than the invoice date or null."
+    )
+    error: str = Field(
+        description="An explanation of why the extraction failed, e.g. 'No supplier found.' Be short and concise. "
+    )
+
+def _init(
+   state: ExtractMainDataState,     
+) -> Command[Literal["get_main_info"]]:
+    path = state.doc_path
+    output_dir = "output_data"
+    file_name = path.split("/")[-1].split(".")[0]
+    json_file_path = os.path.join(output_dir, f"{file_name}.json")
+    with open(json_file_path, "r") as json_file:
+        json_content = json_file.read()
+
+    return Command(
+        update={"ocr_text": json_content['ocr_text']},
+        goto="get_main_info"
+    )
+
+
+
+
+def _get_main_info(
+        state: ExtractMainDataState,
+) -> Command[Literal["verify_main_info"]]:
+    parser = JsonOutputParser(pydantic_object=MainInfoResult)
+    path = state.doc_path
+
+    messages = [
+        SystemMessagePromptTemplate.from_template(
+            EXTRACT_MAIN_INFO_SYSTEM_PROMPT,
+            partial_variables={"format_instructions": parser.get_format_instructions()}
+
+        ),
+        HumanMessagePromptTemplate(
+            EXTRACT_MAIN_INFO_USER_PROMPT,
+            partial_variables={"ocr_text": state.ocr_text},
+            type="text"
+        )
+    ]
+
+    messages = add_file_content_to_messages(messages, path)
+    prompts = ChatPromptTemplate(messages=messages)
+    chain = prompts | llm | parser
+    try:
+        resp = chain.invoke()
+    except BadRequestError as e:
+        if e.code == "content_filter":
+            print(f"Content filter error during LLM processing for document '{path}'")
+            resp = MainInfoResult(supplier="null", invoice_number="null", invoice_date="null", error="Content filter error").model_dump()
+        else:
+            raise e
+
+    return Command(
+        update={"main_info": resp},
+        goto="verify_main_info"
+    )
+
+def _verfiy_main_info(
+        state: ExtractMainDataState,
+) -> Command[Literal["save_main_info"]]:
+    info = state.main_info
+    parser = JsonOutputParser(pydantic_object=VerifyResult)
+    prompts = ChatPromptTemplate(
+        [
+            SystemMessagePromptTemplate.from_template(
+                VERIFY_MAIN_INFO_SYSTEM_PROMPT,
+                partial_variables={"format_instructions": parser.get_format_instructions()}
+            ),
+            HumanMessagePromptTemplate(
+                VERIFY_MAIN_INFO_USER_PROMPT,
+                partial_variables={"main_info": info},
+                type="text"
+            )
+        ]
+    )
+    chain = prompts | llm | parser
+    resp = chain.invoke()
+    resp =VerifyResult.model_validate(resp)
+    if resp.result in ["VERIFIED", "CERTAIN"]:
+        return Command(
+            update={"confidence": resp.result},
+            goto="save_main_info"
+            )
+    else:
+        print("Confidence not high enough, retrying extraction with reason")
+        return Command(
+            update={"confidence": resp.result, "reason": resp.reason},
+            goto="retry_get_main_info"
+        )
+    
+def _retry_get_main_info(
+        state:ExtractMainDataState
+) -> Command[Literal["verify_main_info"]]:
+    """
+    Retry extraction with reason
+    """
+    parser = JsonOutputParser(pydantic_object=MainInfoResult)
+    path = state.doc_path
+    prompts = ChatPromptTemplate(
+        [
+            SystemMessagePromptTemplate.from_template(
+                RETRY_MAIN_INFO_SYSTEM_PROMPT,
+                partial_variables={"format_instructions": parser.get_format_instructions()}
+            ),
+            HumanMessagePromptTemplate(
+                RETRY_MAIN_INFO_USER_PROMPT,
+                partial_variables={"main_info": state.main_info,
+                                   "ocr_text": state.ocr_text, 
+                                   "reason": state.reason},
+                type="text"
+            )
+        ]
+    )
+    chain = prompts | llm | parser
+    resp = chain.invoke()
+    return Command(
+        update={"main_info": resp},
+        goto="verify_main_info"
+    )
+
+def save_main_info(
+        state: ExtractMainDataState
+) -> Command[Literal["__end__"]]:
+    """
+    Save the extracted main information to a local JSON file.
+    Updates existing fields and adds new ones while preserving other data.
+    """
+    path = state.doc_path
+    output_dir = "output_data"
+    file_name = path.split("/")[-1].split(".")[0]
+    json_file_path = os.path.join(output_dir, f"{file_name}_main_info.json")
+    
+    # Initialize with new data using model_dump() instead of dict()
+    data = state.main_info.model_dump()
+    
+    # Try to read existing file
+    try:
+        if os.path.exists(json_file_path):
+            with open(json_file_path, "r") as json_file:
+                existing_data = json.load(json_file)
+                # Update existing data with new data
+                existing_data.update(data)
+                data = existing_data
+    except json.JSONDecodeError:
+        # If file is corrupted, use only new data
+        pass
+        
+    # Write combined data back to file
+    with open(json_file_path, "w") as json_file:
+        json.dump(data, json_file)
+    
+    return Command(goto=END)
+
+
+def construct_extract_main_data():
+    workflow = StateGraph(ExtractMainDataState)
+    workflow.add_node("init", _init)
+    workflow.add_node("get_main_info", _get_main_info)
+    workflow.add_node("verify_main_info", _verfiy_main_info)
+    workflow.add_node("retry_get_main_info", _retry_get_main_info)
+    workflow.add_node("save_main_info", save_main_info)
+
+    workflow.add_edge(START, "init")
+    graph = workflow.compile()
+
+    bytes = graph.get_graph().draw_mermaid_png()
+    with open("perform_ocr.png", "wb") as f:
+        f.write(bytes)
+
+    return graph

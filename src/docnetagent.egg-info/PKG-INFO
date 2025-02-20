@@ -1,0 +1,15 @@
+Metadata-Version: 2.2
+Name: docnetagent
+Version: 0.1.0
+Summary: A blueprint for an agentnetwork for document information extraction
+Author-email: Sven Bulach <sven.bulach@prodyna.com>, Martin Kruse <martin.kruse@prodyna.com>
+Requires-Python: >=3.12
+Requires-Dist: pydantic
+Requires-Dist: langchain
+Requires-Dist: openai
+Requires-Dist: python-dotenv
+Requires-Dist: azure-cosmos
+Requires-Dist: azure-ai-documentintelligence
+Requires-Dist: azure-core
+Requires-Dist: Pillow
+Requires-Dist: langchain-openai
