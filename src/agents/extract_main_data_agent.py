@@ -126,7 +126,7 @@ def _get_main_info(
 
 def _verfiy_main_info(
     state: ExtractMainDataState,
-) -> Command[Literal["save_main_info"]]:
+) -> Command[Literal["save_main_info", "retry_get_main_info"]]:
     """Verifies the extracted main information using an LLM."""
     info = state.main_info
     parser = JsonOutputParser(pydantic_object=VerifyResult)
