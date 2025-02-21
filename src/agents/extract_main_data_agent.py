@@ -1,35 +1,51 @@
-from src.model import ExtractMainDataState, MainInfo
 import json
-from src.utils import llm
-from pydantic import BaseModel, Field
+import os
+import re
+import urllib.parse
 from typing import Literal
-from langgraph.types import Command
-from src.util_functions import convert_image_to_base64_from_disk
+
 from langchain_core.output_parsers import JsonOutputParser
-from langgraph.graph import StateGraph, START, END
-from src.agents.prompts.extract_main_data_prompts import (
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
+from openai import BadRequestError
+from pydantic import BaseModel, Field
+
+from agents.prompts.extract_main_data_prompts import (
     EXTRACT_MAIN_INFO_SYSTEM_PROMPT,
     EXTRACT_MAIN_INFO_USER_PROMPT,
-    VERIFY_MAIN_INFO_SYSTEM_PROMPT,
-    VERIFY_MAIN_INFO_USER_PROMPT,
     RETRY_MAIN_INFO_SYSTEM_PROMPT,
     RETRY_MAIN_INFO_USER_PROMPT,
+    VERIFY_MAIN_INFO_SYSTEM_PROMPT,
+    VERIFY_MAIN_INFO_USER_PROMPT,
 )
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-import os
-from src.util_functions import add_file_content_to_messages
-from openai import BadRequestError
-import urllib.parse
-import re
+from model import ExtractMainDataState
+from util_functions import add_file_content_to_messages, convert_image_to_base64_from_disk
+from utils import llm
+
+
+"""
+Workflow extracts key data (supplier, invoice number, date) from invoices using OCR and LLMs, with verification and retry mechanisms.
+"""
 
 class VerifyResult(BaseModel):
+    """Represents the result of a verification, including a status and reason."""
+
     result: str = Field(
         description="One of the following options: VERIFIED, CERTAIN, UNSURE, FALSE. Do not write anything else than one of these options."
     )
     reason: str = Field(
         description="If Confidence is 'UNSURE' or 'FALSE', provide a reason. If Confidence is 'VERIFIED' or 'CERTAIN', write 'null'."
     )
+
+
 class MainInfoResult(BaseModel):
+    """Represents the main information extracted from an invoice."""
+
     supplier: str = Field(
         description="The supplier's name or null if you cannot find any supplier. Do not write anything else than the supplier company name or null."
     )
@@ -43,9 +59,11 @@ class MainInfoResult(BaseModel):
         description="An explanation of why the extraction failed, e.g. 'No supplier found.' Be short and concise. "
     )
 
+
 def _init(
-   state: ExtractMainDataState,
+    state: ExtractMainDataState,
 ) -> Command[Literal["get_main_info"]]:
+    """Initializes the state by loading OCR text from a JSON file."""
     path = state.doc_path
     output_dir = "output_data"
 
@@ -61,18 +79,16 @@ def _init(
 
     json_file_path = os.path.join(output_dir, f"{file_name}.json")
 
-    with open(json_file_path, "r") as json_file: 
-        json_content = json.load(json_file) 
+    with open(json_file_path, "r") as json_file:
+        json_content = json.load(json_file)
 
-    return Command(
-        update={"ocr_text": json_content['ocr_text']},
-        goto="get_main_info"
-    )
+    return Command(update={"ocr_text": json_content["ocr_text"]}, goto="get_main_info")
 
 
 def _get_main_info(
-        state: ExtractMainDataState,
+    state: ExtractMainDataState,
 ) -> Command[Literal["verify_main_info"]]:
+    """Extracts main information from the OCR text using an LLM."""
     parser = JsonOutputParser(pydantic_object=MainInfoResult)
     path = state.doc_path
 
@@ -96,92 +112,92 @@ def _get_main_info(
     except BadRequestError as e:
         if e.code == "content_filter":
             print(f"Content filter error during LLM processing for document '{path}'")
-            resp = MainInfoResult(supplier="null", invoice_number="null", invoice_date="null", error="Content filter error").model_dump()
+            resp = MainInfoResult(
+                supplier="null",
+                invoice_number="null",
+                invoice_date="null",
+                error="Content filter error",
+            ).model_dump()
         else:
             raise e
 
-    return Command(
-        update={"main_info": resp},
-        goto="verify_main_info"
-    )
+    return Command(update={"main_info": resp}, goto="verify_main_info")
+
 
 def _verfiy_main_info(
-        state: ExtractMainDataState,
+    state: ExtractMainDataState,
 ) -> Command[Literal["save_main_info"]]:
+    """Verifies the extracted main information using an LLM."""
     info = state.main_info
     parser = JsonOutputParser(pydantic_object=VerifyResult)
     prompts = ChatPromptTemplate(
         [
             SystemMessagePromptTemplate.from_template(
                 VERIFY_MAIN_INFO_SYSTEM_PROMPT,
-                partial_variables={"format_instructions": parser.get_format_instructions()}
+                partial_variables={"format_instructions": parser.get_format_instructions()},
             ),
             HumanMessagePromptTemplate.from_template(
                 VERIFY_MAIN_INFO_USER_PROMPT,
                 partial_variables={"main_info": info},
-                type="text"
-            )
+                type="text",
+            ),
         ]
     )
     chain = prompts | llm | parser
     resp = chain.invoke({})
-    resp =VerifyResult.model_validate(resp)
+    resp = VerifyResult.model_validate(resp)
     if resp.result in ["VERIFIED", "CERTAIN"]:
-        return Command(
-            update={"confidence": resp.result},
-            goto="save_main_info"
-            )
+        return Command(update={"confidence": resp.result}, goto="save_main_info")
     else:
         if state.retried:
             print("Confidence not high enoguh and already retried, ending extraction")
             print(f"Reason: {resp.reason}")
             print(f"Confidence: {resp.result}")
-            return Command(update={"confidence": resp.result, "reason": resp.reason}, goto=END)
-        
+            return Command(
+                update={"confidence": resp.result, "reason": resp.reason}, goto=END
+            )
+
         print("Confidence not high enough, retrying extraction with reason")
         return Command(
             update={"confidence": resp.result, "reason": resp.reason},
-            goto="retry_get_main_info"
+            goto="retry_get_main_info",
         )
-    
+
+
 def _retry_get_main_info(
-        state:ExtractMainDataState
+    state: ExtractMainDataState,
 ) -> Command[Literal["verify_main_info"]]:
-    """
-    Retry extraction with reason
-    """
+    """Retries the main information extraction with a reason for failure."""
     parser = JsonOutputParser(pydantic_object=MainInfoResult)
     path = state.doc_path
     messages = [
-            SystemMessagePromptTemplate.from_template(
-                RETRY_MAIN_INFO_SYSTEM_PROMPT,
-                partial_variables={"format_instructions": parser.get_format_instructions()}
-            ),
-            HumanMessagePromptTemplate.from_template(
-                RETRY_MAIN_INFO_USER_PROMPT,
-                partial_variables={"main_info": state.main_info,
-                                   "ocr_text": state.ocr_text, 
-                                   "reason": state.reason},
-                type="text"
-            )
-        ]
+        SystemMessagePromptTemplate.from_template(
+            RETRY_MAIN_INFO_SYSTEM_PROMPT,
+            partial_variables={"format_instructions": parser.get_format_instructions()},
+        ),
+        HumanMessagePromptTemplate.from_template(
+            RETRY_MAIN_INFO_USER_PROMPT,
+            partial_variables={
+                "main_info": state.main_info,
+                "ocr_text": state.ocr_text,
+                "reason": state.reason,
+            },
+            type="text",
+        ),
+    ]
     messages = add_file_content_to_messages(messages, path)
     prompts = ChatPromptTemplate(messages=messages)
     chain = prompts | llm | parser
     resp = chain.invoke({})
     return Command(
-        update={"main_info": resp, "retried": True},
-        goto="verify_main_info"
+        update={"main_info": resp, "retried": True}, goto="verify_main_info"
     )
 
+
 def save_main_info(
-        state: ExtractMainDataState
+    state: ExtractMainDataState,
 ) -> Command[Literal["__end__"]]:
-    """
-    Save the extracted main information to a local JSON file.
-    Handles both local file paths and URLs for doc_path.
-    Updates existing fields and adds new ones while preserving other data.
-    """
+    """Saves the extracted information to a JSON file, updating existing data."""
     doc_path = state.doc_path
     output_dir = "output_data"
     os.makedirs(output_dir, exist_ok=True)
@@ -191,9 +207,9 @@ def save_main_info(
         parsed_url = urllib.parse.urlparse(doc_path)
         # Extract filename from the path part of the URL
         path_segments = parsed_url.path.split("/")
-        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc" # Use "url_doc" as fallback if no filename in path
+        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"  # Use "url_doc" as fallback if no filename in path
 
-        # Sanitize filename from URL 
+        # Sanitize filename from URL
         file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url)
 
         # Remove extension if it exists in the URL filename
@@ -220,8 +236,7 @@ def save_main_info(
                 data = existing_data
         except json.JSONDecodeError:
             # If file is corrupted, use only new data
-            pass 
-
+            pass
 
     # Write combined data back to file
     with open(json_file_path, "w") as json_file:
@@ -231,6 +246,7 @@ def save_main_info(
 
 
 def construct_extract_main_data():
+    """Constructs and returns the state graph for extracting main data."""
     workflow = StateGraph(ExtractMainDataState)
     workflow.add_node("init", _init)
     workflow.add_node("get_main_info", _get_main_info)

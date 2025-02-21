@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
-from src.agents.extract_main_data_agent import construct_extract_main_data
-from src.agents.ocr_agent import construct_ocr
-from src.model import BaseState
+from agents.extract_main_data_agent import construct_extract_main_data
+from agents.ocr_agent import construct_ocr
+from model import BaseState
 import os
 
 def _construct_graph():

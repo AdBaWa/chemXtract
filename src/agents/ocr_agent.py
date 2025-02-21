@@ -1,24 +1,25 @@
-from typing import List, Literal
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command
 import json
-from src.model import PerformOCRState
 import os
-from src.handler.ocr_processor_client import OCRProcessor, DocumentIntelligenceAuth
-from src.util_functions import convert_image_to_base64_from_disk
-import urllib.parse
 import re
+import urllib.parse
+from typing import Literal
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
+
+from handler.ocr_processor_client import DocumentIntelligenceAuth, OCRProcessor
+from model import PerformOCRState
+from util_functions import convert_image_to_base64_from_disk
 
 doc_int_auth = DocumentIntelligenceAuth()
 doc_int_client = doc_int_auth.get_client()
 ocr_processor = OCRProcessor(doc_int_client)
 
+
 def _init(
     state: PerformOCRState,
 ) -> Command[Literal["perform_ocr", "__end__"]]:
-    """
-    Initialization node to check if document path is provided.
-    """
+    """Initializes the OCR process; checks for a document path."""
     if not state.doc_path:
         error_msg = "Document path is missing in the state."
         print(f"Error: {error_msg}")
@@ -26,38 +27,34 @@ def _init(
             update={"error": error_msg},
             goto=END,
         )
-    return Command(update={},goto="perform_ocr")
+    return Command(update={}, goto="perform_ocr")
+
 
 def _perform_ocr(
     state: PerformOCRState,
 ) -> Command[Literal["save_ocr_text"]]:
-    """
-    Perform OCR on the document.
-    """
+    """Performs OCR on the document (URL or local file)."""
     doc_path = state.doc_path
     print("Performing OCR on the document...")
     if doc_path.lower().startswith(("http://", "https://")):
         extracted_text = ocr_processor.extract_text_from_url(doc_path)
     else:
-        #TODO: Currently failes due to Invalid Request Error; Code: Invalid Content; Message: File is corrupted or format unsupported...
+        # TODO: Currently failes due to Invalid Request Error; Code: Invalid Content; Message: File is corrupted or format unsupported...
         base64_image = convert_image_to_base64_from_disk(doc_path)
         extracted_text = ocr_processor.extract_text_from_base64_image(base64_image)
-    
+
     return Command(
         update={
             "ocr_text": extracted_text,
         },
         goto="save_ocr_text",
-
     )
+
 
 def _save_ocr_text(
     state: PerformOCRState,
 ) -> Command[Literal["__end__"]]:
-    """
-    Save the extracted OCR text to a local JSON file.
-    Handles both local file paths and URLs for doc_path.
-    """
+    """Saves the extracted OCR text to a JSON file."""
     doc_path = state.doc_path
     extracted_text = state.ocr_text
     print("Saving the extracted OCR text to a local JSON file...")
@@ -69,12 +66,14 @@ def _save_ocr_text(
         parsed_url = urllib.parse.urlparse(doc_path)
         # Extract filename from the path part of the URL
         path_segments = parsed_url.path.split("/")
-        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc" # Use "url_doc" as fallback if no filename in path
+        filename_from_url = (
+            path_segments[-1] if path_segments[-1] else "url_doc"
+        )  # Use "url_doc" as fallback if no filename in path
 
         # Sanitize filename from URL to be safe for file system
         file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url)
 
-        # Remove extension if it exists in the URL filename 
+        # Remove extension if it exists in the URL filename
         file_name = file_name.split(".")[0]
 
         # If after sanitization and removing extension, filename is empty, use a generic name
@@ -90,7 +89,9 @@ def _save_ocr_text(
 
     return Command(update={}, goto=END)
 
+
 def construct_ocr():
+    """Constructs and returns the state graph for OCR processing."""
     workflow = StateGraph(PerformOCRState)
     workflow.add_node("init", _init)
     workflow.add_node("perform_ocr", _perform_ocr)
