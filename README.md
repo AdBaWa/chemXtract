@@ -58,7 +58,20 @@ To run this project, you will need to set up the necessary environment and depen
 
 ### Installation
 
-TBD
+1.  **Clone the repository:** Clone this project repository to your local machine.
+2.  **Navigate to the project directory:** `cd <project_directory>`
+3.  **Create a virtual environment using uv:** `uv venv .venv`
+4.  **Install dependencies using uv:** `uv sync`
+5.  **Select Python Interpreter:** In your IDE, select the Python interpreter located within the virtual environment: `.venv/bin/python3`. This ensures you are using the correct Python environment with all project dependencies.
+
+### Developing
+
+When contributing to this project or adding new functionalities, follow these steps to manage dependencies:
+
+1.  **Install a new library:** If you need to add a new Python library, use `uv pip install <library_name>`. This command installs the library within your virtual environment.
+2.  **Update `requirements.txt`:** After installing new libraries, update the `requirements.txt` file to reflect these changes. Run `uv pip freeze > requirements.txt` to regenerate the file with the current environment's dependencies.
+3.  **Add requirements to uv management:** To ensure `uv` is aware of the new requirements, use `uv add -r requirements.txt`. This command tells `uv` to manage the dependencies listed in `requirements.txt`.
+4.  **Add and commit changes:** After making changes and updating dependencies, you can add your changes to Git and commit them. 
 
 ### Running the Project
 
