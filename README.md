@@ -9,9 +9,32 @@ DocNetAgent is a Python-based project designed to automate the extraction of key
 *   **Document Processing via OCR:**  Utilizes Azure Document Intelligence to perform OCR on document images, extracting text content from both local files and publicly accessible URLs.
 *   **Intelligent Information Extraction:** Employs Large Language Models (LLMs) to analyze the OCR output and extract structured information, specifically targeting key invoice details such as supplier name, invoice number, and invoice date.
 *   **Data Verification and Retry Mechanism:** Implements a verification step using LLMs to assess the confidence level of the extracted information. In cases of low confidence, the system can retry the extraction process with refined prompts.
-*   **Workflow Orchestration with LangGraph:**  The entire document processing pipeline is defined as a state graph using LangGraph, providing a clear and manageable structure for complex workflows.
+*   **Workflow Orchestration with LangGraph:**  The entire document processing pipeline is defined as a state graph using LangGraph, providing a clear and manageable structure for complex workflows. More information and tutorials about LangGraph can be found here: https://langchain-ai.github.io/langgraph/tutorials/introduction/
 *   **Input Flexibility:** Supports processing documents from local file paths within an `input_data` directory and directly from URLs.
 *   **Structured Output:** Extracted information is saved in JSON format in the `output_data` directory, making it easy to integrate with other systems or for further analysis.
+
+## Workflow Visualizations
+
+This project utilizes LangGraph to define the document processing workflow. Visual representations of the workflows are automatically generated as PNG images.
+
+### OCR Workflow
+
+This image shows the state graph for the Optical Character Recognition (OCR) process. It outlines the steps involved in taking a document path as input, performing OCR using Azure Document Intelligence, and saving the extracted text.
+
+![OCR Workflow](perform_ocr.png)
+
+### Main Data Extraction Workflow
+
+This image illustrates the state graph for the main data extraction process. The workflow takes the OCR output, uses an LLM to extract key information (like supplier, invoice number, and date), verifies the extracted information, and includes a retry mechanism for cases where confidence is low.
+
+![Main Data Extraction Workflow](extract_main_data.png)
+
+### End-to-End Workflow
+
+Here you see a high-level overview of the complete end-to-end document processing workflow. It shows how the OCR workflow and the main data extraction workflow are connected to form the entire pipeline, starting from document input to final information extraction.
+
+![End-to-End Workflow](workflow.png)
+
 
 ## Architecture
 
@@ -58,11 +81,12 @@ To run this project, you will need to set up the necessary environment and depen
 
 ### Installation
 
-1.  **Clone the repository:** Clone this project repository to your local machine.
-2.  **Navigate to the project directory:** `cd <project_directory>`
-3.  **Create a virtual environment using uv:** `uv venv .venv`
-4.  **Install dependencies using uv:** `uv sync`
-5.  **Select Python Interpreter:** In your IDE, select the Python interpreter located within the virtual environment: `.venv/bin/python3`. This ensures you are using the correct Python environment with all project dependencies.
+1.  **Install uv:** https://docs.astral.sh/uv/getting-started/installation/
+2.  **Clone the repository:** Clone this project repository to your local machine.
+3.  **Navigate to the project directory:** `cd <project_directory>`
+4.  **Create a virtual environment using uv:** `uv venv .venv`
+5.  **Install dependencies using uv:** `uv sync`
+6.  **Select Python Interpreter:** In your IDE, select the Python interpreter located within the virtual environment: `.venv/bin/python3`. This ensures you are using the correct Python environment with all project dependencies.
 
 ### Developing
 
