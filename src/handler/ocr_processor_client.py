@@ -54,7 +54,7 @@ class OCRProcessor:
             The extracted text content as a string, or None if an error occurs.
         """
         try:
-            analyze_request = AnalyzeDocumentRequest(file_stream=base64_image)
+            analyze_request = AnalyzeDocumentRequest(bytes_source=base64_image)
             poller = self.client.begin_analyze_document(
                 "prebuilt-read",
                 analyze_request,  # Pass AnalyzeDocumentRequest as body

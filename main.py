@@ -22,15 +22,21 @@ def _construct_graph():
         f.write(bytes_graph)
     return graph
 
-def main():
+def main_local_files():
     graph = _construct_graph()
 
     input_folder = "input_data"
     for filename in os.listdir(input_folder):
         filepath = os.path.join(input_folder, filename)
+        print(filepath)
         if os.path.isfile(filepath):
-            state = BaseState(filepath=filepath)
+            state = BaseState(doc_path=filepath)
             final_state = graph.invoke(state)
-
+def main_url():
+    urls = ["https://invoiceoffice.de/wp-content/uploads/2021/04/Eine-Beispielrechnung-fu%CC%88r-Freiberufler-und-Unternehmen.png"]
+    graph = _construct_graph()
+    for url in urls:
+        state = BaseState(doc_path=url)
+        final_state = graph.invoke(state)
 if __name__ == "__main__":
-    main()
+    main_url()

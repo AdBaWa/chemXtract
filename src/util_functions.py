@@ -66,19 +66,28 @@ def convert_image_to_base64_from_disk(image_path: str) -> str:
 
 def add_file_content_to_messages(messages, image_path: str):
     """
-    Adds image content from a local file to messages as base64.
+    Adds image content from a local file or a public URL to messages.
 
     Args:
         messages: List of messages to append to
-        image_path: Path to the local image file
+        image_path: Path to the local image file OR a public image URL
 
     Returns:
         Updated messages list with the image content added
     """
-    if image_path.lower().endswith((".png", ".jpg", ".jpeg")):
+    if image_path.lower().startswith(("http://", "https://")): # Check if it's a URL
+        image_url = image_path
+        url = ImagePromptTemplate().format(url=image_url) # Format for URL input
+        msg = HumanMessagePromptTemplate.from_template(
+            template=[
+                {"type": "image_url", "image_url": url},
+            ]
+        )
+        messages.append(msg)
+    elif image_path.lower().endswith((".png", ".jpg", ".jpeg")):
         try:
             image_base64 = convert_image_to_base64_from_disk(image_path)
-            url = ImagePromptTemplate().format(url=image_base64)
+            url = ImagePromptTemplate().format(url=image_base64) # Format for base64 input
             msg = HumanMessagePromptTemplate.from_template(
                 template=[
                     {"type": "image_url", "image_url": url},
@@ -86,8 +95,8 @@ def add_file_content_to_messages(messages, image_path: str):
             )
             messages.append(msg)
         except Exception as e:
-            raise Exception(f"Error processing image {image_path}: {e}")
+            raise Exception(f"Error processing image file {image_path}: {e}")
     else:
-        raise ValueError(f"Unsupported file type. Only PNG and JPEG images are supported: {image_path}")
+        raise ValueError(f"Unsupported input type. Provide a PNG/JPEG file path or a public image URL: {image_path}")
 
     return messages

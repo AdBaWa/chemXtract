@@ -19,6 +19,8 @@ from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTempla
 import os
 from src.util_functions import add_file_content_to_messages
 from openai import BadRequestError
+import urllib.parse
+import re
 
 class VerifyResult(BaseModel):
     result: str = Field(
@@ -42,21 +44,30 @@ class MainInfoResult(BaseModel):
     )
 
 def _init(
-   state: ExtractMainDataState,     
+   state: ExtractMainDataState,
 ) -> Command[Literal["get_main_info"]]:
     path = state.doc_path
     output_dir = "output_data"
-    file_name = path.split("/")[-1].split(".")[0]
+
+    if path.startswith(("http://", "https://")):
+        parsed_url = urllib.parse.urlparse(path)
+        path_segments = parsed_url.path.split("/")
+        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"
+        file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url).split(".")[0]
+        if not file_name:
+            file_name = "url_document"
+    else:
+        file_name = path.split("/")[-1].split(".")[0]
+
     json_file_path = os.path.join(output_dir, f"{file_name}.json")
-    with open(json_file_path, "r") as json_file:
-        json_content = json_file.read()
+
+    with open(json_file_path, "r") as json_file: 
+        json_content = json.load(json_file) 
 
     return Command(
         update={"ocr_text": json_content['ocr_text']},
         goto="get_main_info"
     )
-
-
 
 
 def _get_main_info(
@@ -68,21 +79,20 @@ def _get_main_info(
     messages = [
         SystemMessagePromptTemplate.from_template(
             EXTRACT_MAIN_INFO_SYSTEM_PROMPT,
-            partial_variables={"format_instructions": parser.get_format_instructions()}
-
+            partial_variables={"format_instructions": parser.get_format_instructions()},
         ),
-        HumanMessagePromptTemplate(
+        HumanMessagePromptTemplate.from_template(
             EXTRACT_MAIN_INFO_USER_PROMPT,
             partial_variables={"ocr_text": state.ocr_text},
-            type="text"
-        )
+            type="text",
+        ),
     ]
 
     messages = add_file_content_to_messages(messages, path)
     prompts = ChatPromptTemplate(messages=messages)
     chain = prompts | llm | parser
     try:
-        resp = chain.invoke()
+        resp = chain.invoke({})
     except BadRequestError as e:
         if e.code == "content_filter":
             print(f"Content filter error during LLM processing for document '{path}'")
@@ -106,7 +116,7 @@ def _verfiy_main_info(
                 VERIFY_MAIN_INFO_SYSTEM_PROMPT,
                 partial_variables={"format_instructions": parser.get_format_instructions()}
             ),
-            HumanMessagePromptTemplate(
+            HumanMessagePromptTemplate.from_template(
                 VERIFY_MAIN_INFO_USER_PROMPT,
                 partial_variables={"main_info": info},
                 type="text"
@@ -114,7 +124,7 @@ def _verfiy_main_info(
         ]
     )
     chain = prompts | llm | parser
-    resp = chain.invoke()
+    resp = chain.invoke({})
     resp =VerifyResult.model_validate(resp)
     if resp.result in ["VERIFIED", "CERTAIN"]:
         return Command(
@@ -122,6 +132,12 @@ def _verfiy_main_info(
             goto="save_main_info"
             )
     else:
+        if state.retried:
+            print("Confidence not high enoguh and already retried, ending extraction")
+            print(f"Reason: {resp.reason}")
+            print(f"Confidence: {resp.result}")
+            return Command(update={"confidence": resp.result, "reason": resp.reason}, goto=END)
+        
         print("Confidence not high enough, retrying extraction with reason")
         return Command(
             update={"confidence": resp.result, "reason": resp.reason},
@@ -136,13 +152,12 @@ def _retry_get_main_info(
     """
     parser = JsonOutputParser(pydantic_object=MainInfoResult)
     path = state.doc_path
-    prompts = ChatPromptTemplate(
-        [
+    messages = [
             SystemMessagePromptTemplate.from_template(
                 RETRY_MAIN_INFO_SYSTEM_PROMPT,
                 partial_variables={"format_instructions": parser.get_format_instructions()}
             ),
-            HumanMessagePromptTemplate(
+            HumanMessagePromptTemplate.from_template(
                 RETRY_MAIN_INFO_USER_PROMPT,
                 partial_variables={"main_info": state.main_info,
                                    "ocr_text": state.ocr_text, 
@@ -150,11 +165,12 @@ def _retry_get_main_info(
                 type="text"
             )
         ]
-    )
+    messages = add_file_content_to_messages(messages, path)
+    prompts = ChatPromptTemplate(messages=messages)
     chain = prompts | llm | parser
-    resp = chain.invoke()
+    resp = chain.invoke({})
     return Command(
-        update={"main_info": resp},
+        update={"main_info": resp, "retried": True},
         goto="verify_main_info"
     )
 
@@ -163,32 +179,54 @@ def save_main_info(
 ) -> Command[Literal["__end__"]]:
     """
     Save the extracted main information to a local JSON file.
+    Handles both local file paths and URLs for doc_path.
     Updates existing fields and adds new ones while preserving other data.
     """
-    path = state.doc_path
+    doc_path = state.doc_path
     output_dir = "output_data"
-    file_name = path.split("/")[-1].split(".")[0]
-    json_file_path = os.path.join(output_dir, f"{file_name}_main_info.json")
-    
-    # Initialize with new data using model_dump() instead of dict()
+    os.makedirs(output_dir, exist_ok=True)
+
+    if doc_path.startswith(("http://", "https://")):
+        # Handle URL
+        parsed_url = urllib.parse.urlparse(doc_path)
+        # Extract filename from the path part of the URL
+        path_segments = parsed_url.path.split("/")
+        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc" # Use "url_doc" as fallback if no filename in path
+
+        # Sanitize filename from URL 
+        file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url)
+
+        # Remove extension if it exists in the URL filename
+        file_name = file_name.split(".")[0]
+
+        if not file_name:
+            file_name = "url_document"
+
+    else:
+        file_name = doc_path.split("/")[-1].split(".")[0]
+
+    json_file_path = os.path.join(output_dir, f"{file_name}.json")
+
     data = state.main_info.model_dump()
-    
-    # Try to read existing file
-    try:
-        if os.path.exists(json_file_path):
+    data["confidence"] = state.confidence
+    data["reason"] = state.reason
+
+    if os.path.exists(json_file_path):
+        try:
             with open(json_file_path, "r") as json_file:
                 existing_data = json.load(json_file)
                 # Update existing data with new data
                 existing_data.update(data)
                 data = existing_data
-    except json.JSONDecodeError:
-        # If file is corrupted, use only new data
-        pass
-        
+        except json.JSONDecodeError:
+            # If file is corrupted, use only new data
+            pass 
+
+
     # Write combined data back to file
     with open(json_file_path, "w") as json_file:
         json.dump(data, json_file)
-    
+
     return Command(goto=END)
 
 
