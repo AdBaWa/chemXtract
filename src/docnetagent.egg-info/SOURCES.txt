@@ -1,4 +1,5 @@
 pyproject.toml
+src/main.py
 src/model.py
 src/util_functions.py
 src/utils.py
