@@ -258,7 +258,7 @@ def construct_extract_main_data():
     graph = workflow.compile()
 
     bytes = graph.get_graph().draw_mermaid_png()
-    with open("perform_ocr.png", "wb") as f:
+    with open("extract_main_data.png", "wb") as f:
         f.write(bytes)
 
     return graph
