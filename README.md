@@ -7,11 +7,10 @@ DocNetAgent is a Python-based project designed to automate the extraction of key
 ## Features
 
 *   **Document Processing via OCR:**  Utilizes Azure Document Intelligence to perform OCR on document images, extracting text content from both local files and publicly accessible URLs.
-*   **Intelligent Information Extraction:** Employs Large Language Models (LLMs) to analyze the OCR output and extract structured information, specifically targeting key invoice details such as supplier name, invoice number, and invoice date.
+*   **Intelligent Information Extraction:** Employs Large Language Models (LLMs) to analyze the documents and the OCR output and extract structured information, specifically targeting key invoice details such as supplier name, invoice number, and invoice date.
 *   **Data Verification and Retry Mechanism:** Implements a verification step using LLMs to assess the confidence level of the extracted information. In cases of low confidence, the system can retry the extraction process with refined prompts.
 *   **Workflow Orchestration with LangGraph:**  The entire document processing pipeline is defined as a state graph using LangGraph, providing a clear and manageable structure for complex workflows. More information and tutorials about LangGraph can be found here: https://langchain-ai.github.io/langgraph/tutorials/introduction/
-*   **Input Flexibility:** Supports processing documents from local file paths within an `input_data` directory and directly from URLs.
-*   **Structured Output:** Extracted information is saved in JSON format in the `output_data` directory, making it easy to integrate with other systems or for further analysis.
+*   **Structured Output:** Extracted information is saved in JSON format in the `output_data` directory.
 
 ## Workflow Visualizations
 
