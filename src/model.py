@@ -2,10 +2,12 @@ from pydantic import BaseModel, Field
 from typing import Annotated
 import operator
 
+
 class MainInfo(BaseModel):
     supplier: str = ""
     invoice_number: str = ""
     invoice_date: str = ""
+
 
 class BaseState(BaseModel):
     doc_path: str = ""
@@ -16,7 +18,6 @@ class BaseState(BaseModel):
 
 class PerformOCRState(BaseState):
     ocr_text: str = ""
-    
 
 
 class ExtractMainDataState(BaseState):

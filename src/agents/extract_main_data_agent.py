@@ -24,7 +24,7 @@ from agents.prompts.extract_main_data_prompts import (
     VERIFY_MAIN_INFO_USER_PROMPT,
 )
 from model import ExtractMainDataState
-from util_functions import add_file_content_to_messages, convert_image_to_base64_from_disk
+from util_functions import add_file_content_to_messages
 from utils import llm
 
 
@@ -32,15 +32,12 @@ from utils import llm
 Workflow extracts key data (supplier, invoice number, date) from invoices using OCR and LLMs, with verification and retry mechanisms.
 """
 
+
 class VerifyResult(BaseModel):
     """Represents the result of a verification, including a status and reason."""
 
-    result: str = Field(
-        description="One of the following options: VERIFIED, CERTAIN, UNSURE, FALSE. Do not write anything else than one of these options."
-    )
-    reason: str = Field(
-        description="If Confidence is 'UNSURE' or 'FALSE', provide a reason. If Confidence is 'VERIFIED' or 'CERTAIN', write 'null'."
-    )
+    result: str = Field(description="One of the following options: VERIFIED, CERTAIN, UNSURE, FALSE. Do not write anything else than one of these options.")
+    reason: str = Field(description="If Confidence is 'UNSURE' or 'FALSE', provide a reason. If Confidence is 'VERIFIED' or 'CERTAIN', write 'null'.")
 
 
 class MainInfoResult(BaseModel):
@@ -55,9 +52,7 @@ class MainInfoResult(BaseModel):
     invoice_date: str = Field(
         description="The invoice date or null if you cannot find any invoice date. Do not write the due date. Do not write anything else than the invoice date or null."
     )
-    error: str = Field(
-        description="An explanation of why the extraction failed, e.g. 'No supplier found.' Be short and concise. "
-    )
+    error: str = Field(description="An explanation of why the extraction failed, e.g. 'No supplier found.' Be short and concise. ")
 
 
 def _init(
@@ -71,7 +66,7 @@ def _init(
         parsed_url = urllib.parse.urlparse(path)
         path_segments = parsed_url.path.split("/")
         filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"
-        file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url).split(".")[0]
+        file_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", filename_from_url).split(".")[0]
         if not file_name:
             file_name = "url_document"
     else:
@@ -153,9 +148,7 @@ def _verfiy_main_info(
             print("Confidence not high enoguh and already retried, ending extraction")
             print(f"Reason: {resp.reason}")
             print(f"Confidence: {resp.result}")
-            return Command(
-                update={"confidence": resp.result, "reason": resp.reason}, goto=END
-            )
+            return Command(update={"confidence": resp.result, "reason": resp.reason}, goto=END)
 
         print("Confidence not high enough, retrying extraction with reason")
         return Command(
@@ -189,9 +182,7 @@ def _retry_get_main_info(
     prompts = ChatPromptTemplate(messages=messages)
     chain = prompts | llm | parser
     resp = chain.invoke({})
-    return Command(
-        update={"main_info": resp, "retried": True}, goto="verify_main_info"
-    )
+    return Command(update={"main_info": resp, "retried": True}, goto="verify_main_info")
 
 
 def save_main_info(
@@ -210,7 +201,7 @@ def save_main_info(
         filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"  # Use "url_doc" as fallback if no filename in path
 
         # Sanitize filename from URL
-        file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url)
+        file_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", filename_from_url)
 
         # Remove extension if it exists in the URL filename
         file_name = file_name.split(".")[0]

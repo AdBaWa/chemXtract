@@ -48,9 +48,7 @@ class CosmosDBManager:
         """
         log.debug("Initializing Cosmos DB client")
 
-        client = cosmos_client.CosmosClient(
-            self.HOST, {"masterKey": self.MASTER_KEY}, user_agent="LangGraphCosmosDB", user_agent_overwrite=True
-        )
+        client = cosmos_client.CosmosClient(self.HOST, {"masterKey": self.MASTER_KEY}, user_agent="LangGraphCosmosDB", user_agent_overwrite=True)
         try:
             db = client.get_database_client(self.DATABASE_ID)
             container = db.get_container_client(self.CONTAINER_ID)
@@ -106,9 +104,7 @@ class CosmosDBManager:
         for key in keys_path[:-1]:  # Iterate through keys except the last one to navigate the structure
             if key in current_level:
                 current_level = current_level.get(key)
-                if not isinstance(current_level, dict) and not isinstance(
-                    current_level, list
-                ):  # Ensure we can continue to navigate
+                if not isinstance(current_level, dict) and not isinstance(current_level, list):  # Ensure we can continue to navigate
                     log.debug(f"Path element '{key}' did not lead to a nested structure (dict or list) as expected.")
                     return []  # Stop if we can't navigate further
             else:
@@ -135,8 +131,6 @@ class CosmosDBManager:
             return []  # Target key not found
 
         return extracted_values
-
-
 
     def create_item(self, item_body):
         """
@@ -205,7 +199,6 @@ class CosmosDBManager:
             return None
 
 
-
 # Example usage:
 if __name__ == "__main__":
     try:
@@ -218,12 +211,10 @@ if __name__ == "__main__":
         if item:
             log.debug(f"Item: {item}")
 
-        # Example of getting a nested item 
+        # Example of getting a nested item
         document_paths = cosmos_manager.extract_nested_values_from_item(item_id_to_get, ["documents", "path"])
         if document_paths:
             log.debug(f"Document paths: {document_paths}")
 
     except Exception as e:
         log.error(f"An error occurred: {e}")
-
-

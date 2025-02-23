@@ -4,6 +4,7 @@ from PIL import Image
 from langchain_core.prompts.image import ImagePromptTemplate
 from langchain_core.prompts import HumanMessagePromptTemplate
 
+
 def get_mime_type(fmt):
     """Get MIME type for a given image format.
 
@@ -26,6 +27,7 @@ def get_mime_type(fmt):
     else:
         raise ValueError(f"Unsupported image format for data URL: {fmt}")
 
+
 def image_bytes_to_base64(image_bytes):
     """Convert image bytes to a base64 data URL string.
 
@@ -43,6 +45,7 @@ def image_bytes_to_base64(image_bytes):
     mime_type = get_mime_type(image.format)
     data_url_prefix = f"data:{mime_type};base64,"
     return f"{data_url_prefix}{img_str}"
+
 
 def convert_image_to_base64_from_disk(image_path: str) -> str:
     """
@@ -62,7 +65,7 @@ def convert_image_to_base64_from_disk(image_path: str) -> str:
         raise FileNotFoundError(f"Image file not found: {image_path}")
     except Exception as e:
         raise Exception(f"Error converting image to base64: {e}")
-    
+
 
 def add_file_content_to_messages(messages, image_path: str):
     """
@@ -75,9 +78,9 @@ def add_file_content_to_messages(messages, image_path: str):
     Returns:
         Updated messages list with the image content added
     """
-    if image_path.lower().startswith(("http://", "https://")): # Check if it's a URL
+    if image_path.lower().startswith(("http://", "https://")):  # Check if it's a URL
         image_url = image_path
-        url = ImagePromptTemplate().format(url=image_url) # Format for URL input
+        url = ImagePromptTemplate().format(url=image_url)  # Format for URL input
         msg = HumanMessagePromptTemplate.from_template(
             template=[
                 {"type": "image_url", "image_url": url},
@@ -87,7 +90,7 @@ def add_file_content_to_messages(messages, image_path: str):
     elif image_path.lower().endswith((".png", ".jpg", ".jpeg")):
         try:
             image_base64 = convert_image_to_base64_from_disk(image_path)
-            url = ImagePromptTemplate().format(url=image_base64) # Format for base64 input
+            url = ImagePromptTemplate().format(url=image_base64)  # Format for base64 input
             msg = HumanMessagePromptTemplate.from_template(
                 template=[
                     {"type": "image_url", "image_url": url},

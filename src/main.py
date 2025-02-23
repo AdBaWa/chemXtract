@@ -4,6 +4,7 @@ from agents.ocr_agent import construct_ocr
 from model import BaseState
 import os
 
+
 def _construct_graph():
     ocr_graph = construct_ocr()
     extract_main_data_graph = construct_extract_main_data()
@@ -22,6 +23,7 @@ def _construct_graph():
         f.write(bytes_graph)
     return graph
 
+
 def main_local_files():
     graph = _construct_graph()
 
@@ -32,11 +34,15 @@ def main_local_files():
         if os.path.isfile(filepath):
             state = BaseState(doc_path=filepath)
             final_state = graph.invoke(state)
+
+
 def main_url():
     urls = ["https://invoiceoffice.de/wp-content/uploads/2021/04/Eine-Beispielrechnung-fu%CC%88r-Freiberufler-und-Unternehmen.png"]
     graph = _construct_graph()
     for url in urls:
         state = BaseState(doc_path=url)
         final_state = graph.invoke(state)
+
+
 if __name__ == "__main__":
     main_url()

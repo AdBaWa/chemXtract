@@ -66,12 +66,10 @@ def _save_ocr_text(
         parsed_url = urllib.parse.urlparse(doc_path)
         # Extract filename from the path part of the URL
         path_segments = parsed_url.path.split("/")
-        filename_from_url = (
-            path_segments[-1] if path_segments[-1] else "url_doc"
-        )  # Use "url_doc" as fallback if no filename in path
+        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"  # Use "url_doc" as fallback if no filename in path
 
         # Sanitize filename from URL to be safe for file system
-        file_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename_from_url)
+        file_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", filename_from_url)
 
         # Remove extension if it exists in the URL filename
         file_name = file_name.split(".")[0]

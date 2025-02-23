@@ -136,9 +136,7 @@ class AzureBlobStorageManager:
                 permission=BlobSasPermissions(read=True),
                 expiry=datetime.now(timezone.utc) + timedelta(hours=expiry_hours),
             )
-            sas_url = (
-                f"https://{self.account_name}.blob.core.windows.net/{self.container_name}/{full_blob_name}?{sas_token}"
-            )
+            sas_url = f"https://{self.account_name}.blob.core.windows.net/{self.container_name}/{full_blob_name}?{sas_token}"
             print(f"SAS URL generated for blob '{full_blob_name}'.")
             return sas_url
         except Exception as e:
@@ -229,8 +227,8 @@ if __name__ == "__main__":
 
         document_paths_example = [
             {"path": "path/to/your/document1.pdf"},  # Replace with a real blob path
-            {"path": "images/photo.jpg"},             # Replace with another real blob path
-            {"path": "report.docx"},                  # Example filename (will use find_blob_by_filename)
+            {"path": "images/photo.jpg"},  # Replace with another real blob path
+            {"path": "report.docx"},  # Example filename (will use find_blob_by_filename)
         ]
 
         print("\nStarting example usage of AzureBlobStorageManager...")
@@ -251,8 +249,8 @@ if __name__ == "__main__":
         print("\nExample usage complete.")
 
         print("\nStarting example usage of AzureBlobStorageManager to download blob content...")
-        example_blob_name_download = "example_blob.txt" # Replace with a real blob name or filename
-        
+        example_blob_name_download = "example_blob.txt"  # Replace with a real blob name or filename
+
         blob_content = blob_storage_manager.download_blob_content(example_blob_name_download)
         if blob_content:
             print(f"\nContent of blob '{example_blob_name_download}' (first 100 bytes shown, total length: {len(blob_content)} bytes):")
