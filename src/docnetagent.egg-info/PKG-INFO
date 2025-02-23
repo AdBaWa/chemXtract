@@ -59,3 +59,4 @@ Requires-Dist: typing-extensions==4.12.2
 Requires-Dist: urllib3==2.3.0
 Requires-Dist: yarl==1.18.3
 Requires-Dist: zstandard==0.23.0
+Requires-Dist: azure-storage-blob>=12.24.1

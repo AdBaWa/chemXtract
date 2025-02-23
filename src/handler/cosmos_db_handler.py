@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 from azure.cosmos import cosmos_client, exceptions, ContainerProxy, CosmosDict
 from typing import Tuple, Any, List
 import logging
-from data_models import Document
 
 log = logging.getLogger("cosmosdb")
 
