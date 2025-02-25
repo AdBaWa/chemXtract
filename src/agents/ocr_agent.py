@@ -80,6 +80,7 @@ def _save_ocr_text(
 
     else:
         file_name = doc_path.split("/")[-1].split(".")[0]
+        file_name = file_name.removeprefix('input_data\\')
 
     json_file_path = os.path.join(output_dir, f"{file_name}.json")
     with open(json_file_path, "w") as json_file:

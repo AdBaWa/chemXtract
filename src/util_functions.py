@@ -44,7 +44,7 @@ def image_bytes_to_base64(image_bytes):
     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
     mime_type = get_mime_type(image.format)
     data_url_prefix = f"data:{mime_type};base64,"
-    return f"{data_url_prefix}{img_str}"
+    return f"{img_str}"
 
 
 def convert_image_to_base64_from_disk(image_path: str) -> str:
