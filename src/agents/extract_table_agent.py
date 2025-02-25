@@ -4,13 +4,15 @@ import pymupdf
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
-from azure.ai.documentintelligence.models import AnalyzeResult
+from azure.ai.documentintelligence.models import AnalyzeResult, AnalyzeDocumentRequest
 from handler.ocr_processor_client import DocumentIntelligenceAuth, OCRProcessor
 from model import BaseState
 from util_functions import pdf_to_base64_images
 import os
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
+from dotenv import load_dotenv
+load_dotenv()
 
 doc_int_auth = DocumentIntelligenceAuth()
 doc_int_client = doc_int_auth.get_client()
@@ -138,9 +140,8 @@ def _extract_tables_and_page_contents(
         file_path = state.doc_path
         with open(file_path, "rb") as fd:
             poller = document_intelligence_client.begin_analyze_document(
-                model_id="prebuilt-layout",
-                analyze_request=fd.read(),
-                content_type="application/octet-stream",
+                "prebuilt-layout",
+                AnalyzeDocumentRequest(bytes_source=fd.read()),
             )
             analyze_result = poller.result()
 
