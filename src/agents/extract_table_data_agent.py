@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from model import ExtractTableDataState
 from utils import llm
+from utils_mock_extract_table_data import mock_extract_table_data_state
 
 
 class TableDataResult(BaseModel):
@@ -187,3 +188,12 @@ def construct_extract_table_data():
         f.write(bytes)
 
     return graph
+
+def main_url():
+    graph = construct_extract_table_data()
+    state = mock_extract_table_data_state()
+    _ = graph.invoke(state)
+
+
+if __name__ == "__main__":
+    main_url()
