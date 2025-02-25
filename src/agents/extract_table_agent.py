@@ -4,9 +4,13 @@ import pymupdf
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+from azure.ai.documentintelligence.models import AnalyzeResult
 from handler.ocr_processor_client import DocumentIntelligenceAuth, OCRProcessor
 from model import BaseState
 from util_functions import pdf_to_base64_images
+import os
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.documentintelligence import DocumentIntelligenceClient
 
 doc_int_auth = DocumentIntelligenceAuth()
 doc_int_client = doc_int_auth.get_client()
@@ -41,7 +45,123 @@ def _extract_tables_and_page_contents(
     state: BaseState,
 ) -> Command[Literal["concatenate_tables"]]:
     """Extract tables and pages contents from images"""
-    pass
+
+    def get_page_content(analyze_result: AnalyzeResult, page_number: int):
+        """Get the full textual content of the specified page from the document."""
+        # Implementation to extract content from AnalyzeResult object
+        # Assuming 'analyze_result' is the AnalyzeResult object.
+        page = analyze_result.pages[page_number - 1]  # Pages are 1-indexed
+        content = ""
+        for span in page.spans:
+            offset = span.offset
+            length = span.length
+            content += analyze_result.content[offset: offset + length]
+        return content
+
+    def get_table(analyze_result, table_index):
+        """Get the table details including caption, headers, and rows."""
+        table = analyze_result["tables"][table_index]
+
+        # Get caption
+        caption = ""
+        if "caption" in table and table["caption"]:
+            caption = table["caption"].get("content", "") or ""
+        else:
+            caption = ""
+
+            # Build a mapping of (rowIndex, columnIndex) -> cell
+        cell_map = {}
+        for cell in table["cells"]:
+            key = (cell["rowIndex"], cell["columnIndex"])
+            cell_map[key] = cell
+
+            # Get the number of columns and rows
+        num_columns = table.get("columnCount", 0)
+        num_rows = table.get("rowCount", 0)
+
+        # Get headers from rowIndex == 0
+        headers = []
+        for col_index in range(num_columns):
+            key = (0, col_index)
+            if key in cell_map:
+                cell = cell_map[key]
+                content = cell.get("content", "") or ""
+                headers.append(content)
+            else:
+                headers.append("")
+
+                # Get data rows starting from rowIndex == 1
+        rows = []
+        for row_index in range(1, num_rows):
+            row = []
+            for col_index in range(num_columns):
+                key = (row_index, col_index)
+                if key in cell_map:
+                    cell = cell_map[key]
+                    content = cell.get("content", "") or ""
+                    row.append(content)
+                else:
+                    row.append("")
+            rows.append(row)
+
+        return {"caption": caption, "headers": headers, "rows": rows}
+
+    def get_table_content(table_dict):
+        """Create a string representation of the table, separate the columns with ||"""
+        table_content = ""
+        table_content += table_dict["caption"] + "\n"
+        table_content += "||".join(table_dict["headers"]) + "\n"
+        for row in table_dict["rows"]:
+            table_content += "||".join(row) + "\n"
+        return table_content
+
+    def get_page_tables(analyze_result: AnalyzeResult, page_number: int):
+        """Get the tables detected on the specified page."""
+        # Implementation to extract tables from AnalyzeResult object
+        # Assuming 'analyze_result.tables' exists.
+        tables = []
+        for table_index, table in enumerate(analyze_result.tables):
+            if page_number == get_table_page(analyze_result, table_index):
+                tables.append(table_index)
+        return tables
+
+    def get_table_page(analyze_result: AnalyzeResult, table_index: int):
+        """Get the page number of the table"""
+        table = analyze_result.tables[table_index]
+        table_page = table.bounding_regions[0].page_number
+        return table_page
+
+
+    with DocumentIntelligenceClient(
+        endpoint=os.getenv("ENDPOINT_DOCINT"), credential=AzureKeyCredential(os.getenv("API_KEY_DOCINT"))
+    ) as document_intelligence_client:
+        file_path = state.doc_path
+        with open(file_path, "rb") as fd:
+            poller = document_intelligence_client.begin_analyze_document(
+                model_id="prebuilt-layout",
+                analyze_request=fd.read(),
+                content_type="application/octet-stream",
+            )
+            analyze_result = poller.result()
+
+    # We need to have the result in a list of pages and a list of tables
+    # pages: List[Dict[str, Any]] = [], where a dictionary is {"page_number": int, "content": str, "tables": List[int]}
+    # tables: List[Dict[str, Any]] = [], where a dictionary is {"table_number": int, "content": str, "pages": List[int]}
+
+    pages = []
+    for page in analyze_result.pages:
+        page_content = get_page_content(analyze_result, page.page_number)
+        page_tables = get_page_tables(analyze_result, page.page_number)
+        page_image = state.pdf_page_images[page.page_number - 1]
+        pages.append({"number": page.page_number, "content": page_content, "tables": page_tables, "base64": page_image})
+
+    tables = []
+    for table_index, table in enumerate(analyze_result.tables):
+        table_number = table_index
+        table_content = get_table_content(get_table(analyze_result, table_index))
+        tables.append({"number": table_number, "content": table_content, "pages": [get_table_page(analyze_result, table_index)]})
+
+    return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
 
 def _concatenate_tables(
     state: BaseState,
