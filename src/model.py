@@ -27,7 +27,6 @@ class ExtractMainDataState(BaseState):
     reason: str = Field(default="")
     retried: bool = False
 
-
 class ExtractTableDataState(BaseState):
     ocr_text: str = ""
     images: List[str] = []
