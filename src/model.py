@@ -12,6 +12,7 @@ class MainInfo(BaseModel):
 class BaseState(BaseModel):
     doc_path: str = ""
     error: str = ""
+    pdf_page_images: list[str] = []
     input_tokens: Annotated[int, operator.add] = 0
     output_tokens: Annotated[int, operator.add] = 0
 

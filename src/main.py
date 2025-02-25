@@ -1,23 +1,21 @@
 from langgraph.graph import StateGraph, START, END
-from agents.extract_main_data_agent import construct_extract_main_data
-from agents.ocr_agent import construct_ocr
+from agents.extract_table_agent import construct_extract_table_agent
 from model import BaseState
 import os
 
 
 def _construct_graph():
-    ocr_graph = construct_ocr()
-    extract_main_data_graph = construct_extract_main_data()
+    extract_tables_graph = construct_extract_table_agent()
 
     workflow = StateGraph(BaseState)
-    workflow.add_node("ocr", ocr_graph)
-    workflow.add_node("extract_main_data", extract_main_data_graph)
+    workflow.add_node("extract_tables", extract_tables_graph)
+    #workflow.add_node("extract_main_data", extract_main_data_graph)
 
-    workflow.add_edge(START, "ocr")
-    workflow.add_edge("ocr", "extract_main_data")
-    workflow.add_edge("extract_main_data", END)
+    workflow.add_edge(START, "extract_tables")
+    #workflow.add_edge("ocr", "extract_main_data")
+    workflow.add_edge("extract_tables", END)
 
-    graph = workflow.compile(debug=True)
+    graph = workflow.compile(debug=False)
     bytes_graph = graph.get_graph().draw_mermaid_png()
     with open("workflow.png", "wb") as f:
         f.write(bytes_graph)
@@ -36,13 +34,16 @@ def main_local_files():
             _ = graph.invoke(state)
 
 
-def main_url():
-    urls = ["https://invoiceoffice.de/wp-content/uploads/2021/04/Eine-Beispielrechnung-fu%CC%88r-Freiberufler-und-Unternehmen.png"]
+def main():
+    pdfs = ["data/56388722_us2015274579.pdf"
+            #, "../data/78071_DE1771318A1.pdf"
+            #, "../data/80946226_cn111646693.pdf"
+            ]
     graph = _construct_graph()
-    for url in urls:
-        state = BaseState(doc_path=url)
+    for pdf in pdfs:
+        state = BaseState(doc_path=pdf)
         _ = graph.invoke(state)
 
 
 if __name__ == "__main__":
-    main_url()
+    main()

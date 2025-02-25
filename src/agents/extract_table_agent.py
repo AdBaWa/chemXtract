@@ -1,10 +1,5 @@
 
 from typing import Literal
-
-from utils import azure_blob_storage_manager, log
-from langchain_core.prompts.image import ImagePromptTemplate
-from langchain_core.prompts import HumanMessagePromptTemplate
-from model import Document
 import pymupdf
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
@@ -37,10 +32,10 @@ def _pdf_to_base64_images(
     state: BaseState,
 ) -> Command[Literal["extract_tables_and_page_contents"]]:
     """Splits the document into page images"""
-    pdf_bytes = pymupdf.open(state.doc_path)
+    pdf_bytes = pymupdf.open(state.doc_path).tobytes()
     pdf_page_images = pdf_to_base64_images(pdf_bytes)
 
-    return Command(update={}, goto="extract_tables_and_page_contents")
+    return Command(update={"pdf_page_images": pdf_page_images}, goto="extract_tables_and_page_contents")
 
 def _extract_tables_and_page_contents(
     state: BaseState,
@@ -66,9 +61,9 @@ def construct_extract_table_agent():
     workflow = StateGraph(BaseState)
     workflow.add_node("init", _init)
     workflow.add_node("pdf_to_base64_images", _pdf_to_base64_images)
-    #workflow.add_node("extract_tables_and_page_contents", _extract_tables_and_page_contents)
-    #workflow.add_node("concatenate_tables", _concatenate_tables)
-    #workflow.add_node("filter_irrelevant_tables",_filter_irrelevant_tables)
+    workflow.add_node("extract_tables_and_page_contents", _extract_tables_and_page_contents)
+    workflow.add_node("concatenate_tables", _concatenate_tables)
+    workflow.add_node("filter_irrelevant_tables",_filter_irrelevant_tables)
 
     workflow.add_edge(START, "init")
     graph = workflow.compile()
