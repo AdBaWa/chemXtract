@@ -2,7 +2,8 @@ import json
 import os  
 from pathlib import Path  
 from typing import Dict, List, Literal, Optional, Set, Any  
-import pandas as pd  
+import pandas as pd 
+from pydantic import BaseModel, Field
 from langchain_core.output_parsers import JsonOutputParser  
 from langchain_core.prompts import (  
     ChatPromptTemplate,  
@@ -17,35 +18,10 @@ from agents.prompts.table_norming_prompts import (
     TABLE_NORMING_USER_PROMPT,  
 )  
 # Assuming the model module is in the correct path  
-from models.table_norming import TableNormingState  
+from models.table_norming import TableNormingState, NormalizedTableResult, Example, Molecule 
 from utils import llm  
-  
-class Molecule(BaseModel):  
-    """Represents a molecule with its element and percentage."""  
-    element: str  
-    percentage: float  
-  
-class Example(BaseModel):  
-    """Represents an example with its ID and molecules."""  
-    id: int  
-    molecules: List[Molecule]  
-  
-class NormalizedTableResult(BaseModel):  
-    """Represents the normalized table data."""  
-    familyNumber: int  
-    patentNumber: int  
-    title: str  
-    applicant: str  
-    examples: List[Example] = Field(description="List of examples extracted from the table")  
-  
-class TableNormingState(BaseModel):  
-    """State for table normalization processing."""  
-    table_data: Optional[Dict[str, Any]] = None  
-    normalized_table: Optional[Dict[str, Any]] = None  
-    abnormal_material: bool = False  
-    abnormal_details: Dict[int, List[str]] = {}  
-    error: Optional[str] = None  
-  
+   
+
 def _init(state: TableNormingState) -> Command[Literal["normalize_table"]]:  
     """Initializes the state by loading table data from a JSON file.  
       
@@ -59,22 +35,36 @@ def _init(state: TableNormingState) -> Command[Literal["normalize_table"]]:
         FileNotFoundError: If the JSON file doesn't exist  
         json.JSONDecodeError: If the JSON file is invalid  
     """  
-    path = state.doc_path  
-    output_dir = Path("output_data")  
-    output_dir.mkdir(exist_ok=True)  
-      
-    file_name = Path(path).stem  
-    json_file_path = output_dir / f"{file_name}.json"  
-    try:  
-        with open(json_file_path, "r", encoding="utf-8") as json_file:  
-            json_content = json.load(json_file)  
-        if "table_data" not in json_content:  
-            raise ValueError(f"Expected 'table_data' in {json_file_path}, but it was not found")  
-        return Command(update={"table_data": json_content["table_data"]}, goto="normalize_table")  
-    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:  
-        # Log the error and return an empty table data  
-        print(f"Error loading table data: {e}")  
-        return Command(update={"table_data": {}, "error": str(e)}, goto="normalize_table")  
+    path = state.doc_path
+    output_dir = Path("input_data")
+    output_dir.mkdir(exist_ok=True)
+
+    file_name = Path(path).stem
+    json_file_path = output_dir / f"{file_name}.json"
+    try:
+        with open(json_file_path, "r", encoding="utf-8") as json_file:
+            json_content = json.load(json_file)
+
+        # If your table data is a 2D list, convert it to a list of dict
+        if isinstance(json_content, list) and len(json_content) > 1 and isinstance(json_content[0], list):
+            headers = json_content[0]  # The first row is assumed to be headers
+            list_of_dicts = []
+            for row in json_content[1:]:
+                row_dict = {}
+                for i, col in enumerate(row):
+                    # Safely handle header/row length mismatches
+                    col_name = headers[i] if i < len(headers) else f"col{i}"
+                    row_dict[col_name] = col
+                list_of_dicts.append(row_dict)
+            json_content = list_of_dicts
+
+        if not isinstance(json_content, list):
+            raise ValueError(f"Expected a list in {json_file_path}, but got {type(json_content)}")
+            
+        return Command(update={"table_data": json_content}, goto="normalize_table")
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+        print(f"Error loading table data: {e}")
+        return Command(update={"table_data": [], "error": str(e)}, goto="normalize_table")
   
 def _normalize_table(state: TableNormingState) -> Command[Literal["check_abnormal_material", "__end__"]]:  
     """Normalizes the table data using an LLM.  
@@ -110,7 +100,8 @@ def _normalize_table(state: TableNormingState) -> Command[Literal["check_abnorma
         chain = prompts | llm | parser  
         resp = chain.invoke({})  
           
-        return Command(update={"normalized_table": resp}, goto="check_abnormal_material")  
+        parsed_resp = NormalizedTableResult(**resp) if isinstance(resp, dict) else resp
+        return Command(update={"normalized_table": parsed_resp}, goto="check_abnormal_material")  
     except Exception as e:  
         print(f"Error normalizing table: {e}")  
         return Command(update={"error": f"Normalization failed: {str(e)}"}, goto=END)  
@@ -228,20 +219,16 @@ def construct_table_norming() -> StateGraph:
       
     return graph  
   
-def main():  
-    # Example usage of the constructed state graph  
-    state_graph = construct_table_norming()  
-      
-    # Initial state  
-    initial_state = TableNormingState(doc_path="path/to/your/document.json")  
-      
-    # Execute the state graph  
-    current_state = initial_state  
-    while True:  
-        command = state_graph.execute(current_state)  
-        if command.goto == END:  
-            break  
-        current_state = state_graph.update_state(current_state, command.update)  
+def main():
+    state_graph = construct_table_norming()
+    current_state = TableNormingState(doc_path="input_data/test.json")
+
+    while True:
+        command_dict = state_graph.invoke(current_state)
+        # Use dictionary lookups instead of attribute access
+        if command_dict.get("goto") == END:
+            break
+        current_state = state_graph.update_state(current_state, command_dict.get("update", {})) 
   
 if __name__ == "__main__":  
-    main()  
+    main()
