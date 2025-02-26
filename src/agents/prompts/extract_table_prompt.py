@@ -22,5 +22,4 @@ Output must follow this JSON format:
 
 DETECT_CONTINUOUS_TABLES_USER_PROMPT = """
 Here are the pages:
-{pages}
 """

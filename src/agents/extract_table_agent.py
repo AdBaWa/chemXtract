@@ -176,13 +176,20 @@ def _extract_tables_and_page_contents(
 
     return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
 
-def add_merged_table(tables, tables_to_merge):
+def add_merged_table(tables, tables_to_merge, pages):
     """Merge tables that belong together"""
-    table = {"number": len(tables),
+    table_index = len(tables)
+    table = {"number": table_index,
              "content": "\n".join(table["content"] for table in tables_to_merge),
              "pages": list(table["pages"][0] for table in tables_to_merge)
             }
     tables.append(table)
+    
+    for table in tables_to_merge:
+        table_number = table['number']
+        page_number = table["pages"][0] 
+        pages[page_number]["tables"].remove(table_number)
+        pages[page_number]["tables"].append(table_index)
 
 def _concatenate_tables(
     state: BaseState,
@@ -202,18 +209,19 @@ def _concatenate_tables(
                 tables_spills_to_next_page = check_if_table_spills(state.pdf_page_images[last_page], state.pdf_page_images[last_page + 1])
                 
                 if tables_spills_to_next_page:
-                    add_merged_table(tables, tables_to_merge)
+                    #add_merged_table(tables, tables_to_merge)
+                    tables_to_merge.append(state.tables[table_index])
                     table_index += 1
                 else:
-                    add_merged_table(tables, tables_to_merge)
+                    add_merged_table(tables, tables_to_merge, pages)
                     break
             else:
-                add_merged_table(tables, tables_to_merge)
+                add_merged_table(tables, tables_to_merge, pages)
                 break
                 
                 
         if table_index == len(state.tables):
-            add_merged_table(tables, tables_to_merge)
+            add_merged_table(tables, tables_to_merge, pages)
     
     return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
     
@@ -229,7 +237,7 @@ def check_if_table_spills(page1, page2):
             ),
             HumanMessagePromptTemplate.from_template(
                 DETECT_CONTINUOUS_TABLES_USER_PROMPT,
-                partial_variables={"pages": page1},
+                #partial_variables={"pages": page1},
                 type="text",
             ),
         ]

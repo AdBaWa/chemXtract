@@ -134,7 +134,7 @@ def pdf_to_base64_images(pdf_bytes, dpi=200, fmt="jpeg", poppler_path=None):
     """
     base64_images = []
     try:
-        images = convert_from_bytes(pdf_bytes, dpi=dpi, fmt=fmt, poppler_path=poppler_path)
+        images = convert_from_bytes(pdf_bytes, dpi=dpi, fmt=fmt, poppler_path=poppler_path,size=(892, 1263))
         mime_type = get_mime_type(fmt)
         data_url_prefix = f"data:{mime_type};base64,"
 
