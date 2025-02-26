@@ -82,9 +82,16 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
             type="text",
         ),
     ]
+    
+    def get_page(pages, page_nr): # TODO THIS IS A DIRTY WORAROUND 
+        for p in pages:
+            if p["number"] - 1 == page_nr:
+                return p
+        return None
+    
     # add all pages that cover parts of table t
     for p_nr in current_table["pages"]:
-        img_base64 = state.pages[p_nr]["base64"]
+        img_base64 = get_page(state.pages, p_nr)["base64"]
         add_base64image_to_messages(messages, img_base64)
 
     prompts = ChatPromptTemplate(messages=messages)
