@@ -78,7 +78,7 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
         ),
     ]
     # add all pages that cover parts of table t
-    for p_nr in current_table.pages:
+    for p_nr in current_table["pages"]:
         img_base64 = state.pages[p_nr]["base64"]
         add_base64image_to_messages(messages, img_base64)
 
@@ -96,8 +96,8 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
         else:
             raise e
     update_tables = copy.deepcopy(state.tables)
-    update_tables[current_idx]["extracted_data"] = resp.model_dump()
-    return Command(update={"tables": update_tables, "curr_table_idx": current_table}, goto="verify_table_data")
+    update_tables[current_idx]["extracted_data"] = resp # is a dictionary
+    return Command(update={"tables": update_tables, "curr_table_idx": current_idx}, goto="verify_table_data")
 
 
 def _verify_table_data(state: ExtractTableDataState) -> Command[Literal["extract_table_data"]]:
@@ -136,7 +136,7 @@ def _verify_table_data(state: ExtractTableDataState) -> Command[Literal["extract
 
     chain = prompts | llm | parser
     resp = chain.invoke({})
-
+    resp = VerifyExtractionResult.model_validate(resp)
     # decide whether a repeated extraction is required
     if resp.reextraction_necessary:
         # repeat extraction for this table (return verification feedback; increase counter)
@@ -194,9 +194,9 @@ def construct_extract_table_data():
     workflow.add_edge(START, "init")
     graph = workflow.compile()
 
-    bytes = graph.get_graph().draw_mermaid_png()
-    with open("extract_table_data.png", "wb") as f:
-        f.write(bytes)
+    #bytes = graph.get_graph().draw_mermaid_png()
+    #with open("extract_table_data.png", "wb") as f:
+    #    f.write(bytes)
 
     return graph
 
@@ -216,13 +216,11 @@ def my_mock() -> ExtractTableDataState:
     # Load the `pages` object from the pickle file  
     pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')
     base64_pages_for_tab = [pages[p]["base64"] for p in table_05_pages]
-    
-    mock_state = ExtractTableDataState(ocr_text=table_05,
-                                       images=base64_pages_for_tab,
-                                       table_data_result={},
-                                       confidence="",
-                                       reason="",
-                                       retried=False)
+
+    for t in tables:
+        t["extracted_data"] = None
+
+    mock_state = ExtractTableDataState(pages=pages, tables=tables)
     return mock_state
 
 
