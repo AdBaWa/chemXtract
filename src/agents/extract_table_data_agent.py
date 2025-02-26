@@ -198,6 +198,7 @@ def my_mock():
     # Load the `pages` object from the pickle file  
     pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')  
     page_6 = pages[5]
+    #page_6_img_base64 = page_6
 
     # Load the `tables` object from the pickle file  
     tables = load_from_pickle('mock_tabledata/56388722_us2015274579_tables1.pkl') 
