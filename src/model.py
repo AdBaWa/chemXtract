@@ -26,3 +26,8 @@ class ExtractMainDataState(BaseState):
     confidence: str = Field(default="")
     reason: str = Field(default="")
     retried: bool = False
+
+
+class TableNormingState(BaseState):
+    table_data: dict = None
+    normalized_table: dict = None

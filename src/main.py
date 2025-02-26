@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 from agents.extract_main_data_agent import construct_extract_main_data
 from agents.ocr_agent import construct_ocr
+from agents.table_norming_agent import construct_table_norming
 from model import BaseState
 import os
 
@@ -8,14 +9,17 @@ import os
 def _construct_graph():
     ocr_graph = construct_ocr()
     extract_main_data_graph = construct_extract_main_data()
+    table_norming_graph = construct_table_norming()
 
     workflow = StateGraph(BaseState)
     workflow.add_node("ocr", ocr_graph)
     workflow.add_node("extract_main_data", extract_main_data_graph)
+    workflow.add_node("table_norming", table_norming_graph)
 
     workflow.add_edge(START, "ocr")
     workflow.add_edge("ocr", "extract_main_data")
-    workflow.add_edge("extract_main_data", END)
+    workflow.add_edge("extract_main_data", "table_norming")
+    workflow.add_edge("table_norming", END)
 
     graph = workflow.compile(debug=True)
     bytes_graph = graph.get_graph().draw_mermaid_png()
@@ -45,4 +49,4 @@ def main_url():
 
 
 if __name__ == "__main__":
-    main_url()
+    main_local_files()
