@@ -4,8 +4,9 @@ src/main.py
 src/model.py
 src/util_functions.py
 src/utils.py
+src/agents/extract_data_agent.py
 src/agents/extract_main_data_agent.py
-src/agents/extract_table_agent.py
+src/agents/extract_table_data_agent.py
 src/agents/ocr_agent.py
 src/agents/prompts/extract_main_data_prompts.py
 src/docnetagent.egg-info/PKG-INFO
