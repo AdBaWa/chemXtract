@@ -205,7 +205,7 @@ def _concatenate_tables(
         
         while table_index < len(state.tables):
             if tables_to_merge[-1]["pages"][0] + 1 == state.tables[table_index]["pages"][0]:
-                last_page = tables_to_merge[-1]["pages"][0] - 1
+                last_page = tables_to_merge[-1]["pages"][0]
                 tables_spills_to_next_page = check_if_table_spills(state.pdf_page_images[last_page], state.pdf_page_images[last_page + 1])
                 
                 if tables_spills_to_next_page:
