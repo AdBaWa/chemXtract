@@ -17,10 +17,13 @@ from langchain_core.prompts import (
 )
 from util_functions import add_base64image_to_messages
 from azure.core.credentials import AzureKeyCredential
-from agents.prompts.extract_table_prompt import DETECT_CONTINUOUS_TABLES_SYSTEM_PROMPT, DETECT_CONTINUOUS_TABLES_USER_PROMPT
+from agents.prompts.extract_table_prompt import DETECT_CONTINUOUS_TABLES_SYSTEM_PROMPT, DETECT_CONTINUOUS_TABLES_USER_PROMPT, DETECT_IRRELEVANT_TABLES_SYSTEM_PROMPT, DETECT_IRRELEVANT_TABLES_USER_PROMPT
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from dotenv import load_dotenv
 from utils import llm
+from langchain_core.prompts.image import ImagePromptTemplate
+import pickle
+
 
 load_dotenv()
 
@@ -31,10 +34,21 @@ class CheckContinuousTableResult(BaseModel):
     result: str = Field(description="One of the following options: CONTINUOUS or DISTINCT. Do not write anything else than one of these options.")
     reason: str = Field(description="Outline your reasoning.")
 
+class CheckRelevantTableResult(BaseModel):
+    """Represents the result of a verification, including a status and reason."""
+
+    result: str = Field(description="One of the following options: RELEVANT or IRRELEVANT. Do not write anything else than one of these options.")
+    reason: str = Field(description="Outline your reasoning.")
+
 def _init(
     state: BaseState,
 ) -> Command[Literal["pdf_to_base64_images", "__end__"]]:
     """Initializes the OCR process; checks for a document path."""
+    
+    if os.getenv("SKIP_STEP_1") == "True":
+        with open('data/step1.pkl', 'rb') as f:
+            state = pickle.load(f)
+        return Command(update=state, goto=END)
     
     if not state.doc_path:
         error_msg = "Document path is missing in the state."
@@ -176,13 +190,20 @@ def _extract_tables_and_page_contents(
 
     return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
 
-def add_merged_table(tables, tables_to_merge):
+def add_merged_table(tables, tables_to_merge, pages):
     """Merge tables that belong together"""
-    table = {"number": len(tables),
+    table_index = len(tables)
+    table = {"number": table_index,
              "content": "\n".join(table["content"] for table in tables_to_merge),
              "pages": list(table["pages"][0] for table in tables_to_merge)
             }
     tables.append(table)
+    
+    for table in tables_to_merge:
+        table_number = table['number']
+        page_number = table["pages"][0] 
+        pages[page_number]["tables"].remove(table_number)
+        pages[page_number]["tables"].append(table_index)
 
 def _concatenate_tables(
     state: BaseState,
@@ -202,20 +223,21 @@ def _concatenate_tables(
                 tables_spills_to_next_page = check_if_table_spills(state.pdf_page_images[last_page], state.pdf_page_images[last_page + 1])
                 
                 if tables_spills_to_next_page:
-                    add_merged_table(tables, tables_to_merge)
+                    #add_merged_table(tables, tables_to_merge)
+                    tables_to_merge.append(state.tables[table_index])
                     table_index += 1
                 else:
-                    add_merged_table(tables, tables_to_merge)
+                    add_merged_table(tables, tables_to_merge, pages)
                     break
             else:
-                add_merged_table(tables, tables_to_merge)
+                add_merged_table(tables, tables_to_merge, pages)
                 break
                 
                 
         if table_index == len(state.tables):
-            add_merged_table(tables, tables_to_merge)
-    
-    return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
+            add_merged_table(tables, tables_to_merge, pages)
+            
+    return Command(update={"pages": pages, "tables": tables}, goto="filter_irrelevant_tables")
     
 
 
@@ -229,7 +251,7 @@ def check_if_table_spills(page1, page2):
             ),
             HumanMessagePromptTemplate.from_template(
                 DETECT_CONTINUOUS_TABLES_USER_PROMPT,
-                partial_variables={"pages": page1},
+                #partial_variables={"pages": page1},
                 type="text",
             ),
         ]
@@ -248,7 +270,71 @@ def _filter_irrelevant_tables(
     state: BaseState,
 ) -> Command[Literal["__end__"]]:
     """Filter out irrelevant tables"""
-    pass
+    relevant_tables = []
+    relevant_pages_numbers = set()
+
+    for table in state.tables:
+        # Check whether the table is relevant
+        if check_if_table_relevant(state.pages, table):
+            relevant_tables.append(table)
+            relevant_pages_numbers.update(table["pages"])
+
+    # Filter pages to only include those related to relevant tables
+    relevant_pages = [state.pages[page_number] for page_number in sorted(relevant_pages_numbers)]
+
+    if os.getenv("SKIP_STEP_1") == "False":
+        state.tables = relevant_tables
+        state.pages = relevant_pages
+        with open('data/step1.pkl', 'wb') as f:  # open a text file
+            pickle.dump(state, f) # serialize the list
+
+    # Update the state with the filtered tables and pages
+    return Command(update={"tables": relevant_tables, "pages": relevant_pages}, goto=END)
+
+
+def check_if_table_relevant(pages, table):
+    parser = JsonOutputParser(pydantic_object=CheckRelevantTableResult)
+    messages = ChatPromptTemplate(
+        [
+            SystemMessagePromptTemplate.from_template(
+                DETECT_IRRELEVANT_TABLES_SYSTEM_PROMPT,
+                partial_variables={"format_instructions": parser.get_format_instructions()},
+            ),
+            HumanMessagePromptTemplate.from_template(
+                DETECT_IRRELEVANT_TABLES_USER_PROMPT,
+                type="text",
+            ),
+        ]
+    )
+
+    # Get the pages associated with the table
+    table_pages = [pages[page_number] for page_number in table["pages"]]
+
+    # Add the table content
+    table_content = table["content"]
+    messages.append(
+        HumanMessagePromptTemplate.from_template(table_content, type="text")
+    )
+
+    # Add the page contents
+    # Gather page contents
+    pages_content = "\n".join(page["content"] for page in table_pages)
+    messages.append(
+        HumanMessagePromptTemplate.from_template(pages_content, type="text")
+        )
+
+    # Add the page images
+    # Get page images
+    page_images = [page["base64"] for page in table_pages]
+    for page_image in page_images:
+        add_base64image_to_messages(messages, page_image)
+
+
+    chain = messages | llm | parser
+    resp = chain.invoke({})
+    resp = CheckRelevantTableResult.model_validate(resp)
+
+    return resp.result == "RELEVANT"
 
 
 def construct_extract_table_agent():

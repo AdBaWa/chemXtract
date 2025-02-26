@@ -8,8 +8,8 @@ import os
 
 def _construct_graph():
     extract_tables_graph = construct_extract_table_agent()
-    table_norming_graph = construct_table_norming()
     extract_table_data_graph = construct_extract_table_data()
+    table_norming_graph = construct_table_norming()
 
     workflow = StateGraph(BaseState)
     workflow.add_node("extract_tables", extract_tables_graph)
@@ -41,11 +41,10 @@ def main_local_files():
 
 
 def main():
-    pdfs = [
-        "data/56388722_us2015274579.pdf"
-        # , "../data/78071_DE1771318A1.pdf"
-        # , "../data/80946226_cn111646693.pdf"
-    ]
+    pdfs = [#"data/56388722_us2015274579.pdf"
+            #"data/78071_DE1771318A1.pdf"
+            "data/80946226_cn111646693.pdf"
+            ]
     graph = _construct_graph()
     for pdf in pdfs:
         state = BaseState(doc_path=pdf)
