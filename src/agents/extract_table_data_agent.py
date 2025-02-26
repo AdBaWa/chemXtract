@@ -5,66 +5,82 @@ import urllib.parse
 from typing import List, Literal
 
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-)
+from langchain_core.prompts import (ChatPromptTemplate,
+                                    HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 from openai import BadRequestError
 from pydantic import BaseModel, Field
 
-from model import ExtractTableDataState
 from utils import llm
+from model import ExtractTableDataState
 from utils_mock_extract_table_data import mock_extract_table_data_state
+import pickle
+from agents.prompts.step2_prompts import (
+    EXTRACT_DATA,
+    VERIFY_DATA
+)
+from util_functions import add_base64image_to_messages
+import copy
 
 
 class TableDataResult(BaseModel):
     """Represents the extracted table data and its metadata."""
     table_data: List[List[str]] = Field(description="The structured table data.")
-    is_weight_percent: bool = Field(description="True if the table data is in weight%, False if in mol%.")
+    is_weight_percent: bool = Field(description="True if the table data is in weight%, False if in mol%. Or NaN if you are unsure.")
 
+class VerifyExtractionResult(BaseModel):
+    """Represents """
+    feedback: str = Field(description="List of ALL errors that were made.")
+    reextraction_necessary: bool = Field(description="True if too many values are incorrect in the current state of the table and thus the data are not reliable. False otherwise.")
 
 def _init(state: ExtractTableDataState) -> Command[Literal["extract_table_data"]]:
-    """Initializes the state by loading OCR text and images from JSON files."""
-    path = state.doc_path
-    output_dir = "output_data"
-
-    if path.startswith(("http://", "https://")):
-        parsed_url = urllib.parse.urlparse(path)
-        path_segments = parsed_url.path.split("/")
-        filename_from_url = path_segments[-1] if path_segments[-1] else "url_doc"
-        file_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", filename_from_url).split(".")[0]
-        if not file_name:
-            file_name = "url_document"
-    else:
-        file_name = path.split("/")[-1].split(".")[0]
-
-    json_file_path = os.path.join(output_dir, f"{file_name}.json")
-
-    with open(json_file_path, "r") as json_file:
-        json_content = json.load(json_file)
-
-    return Command(update={"ocr_text": json_content["ocr_text"], "images": json_content["images"]}, goto="extract_table_data")
+    # nothing to do since everything is already in the state
+    return Command(update={}, goto="extract_table_data")
 
 
-def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify_table_data"]]:
+def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify_table_data", "__end__"]]:
     """Extracts table data from OCR text and images using an LLM."""
     parser = JsonOutputParser(pydantic_object=TableDataResult)
-    path = state.doc_path
+    
+    current_table = None
+    current_idx = None
 
+    if state.feedback is None:
+        # take a new table and extract data
+        for i,t in enumerate(state.tables):
+            if not t["extracted_data"] is None:
+                continue
+            # if still data to extract
+            current_table = t
+            current_idx = i
+            break
+    else:
+        # there is currently one table in ongoing work, i.e. refinement
+        current_idx = state.curr_table_idx
+        current_table = state.tables[current_idx]
+
+    # data for all tables is extracted
+    if current_table is None:
+        return Command(update={}, goto=END)
+    
+    # extract data for current table
     messages = [
         SystemMessagePromptTemplate.from_template(
-            "Extract table data and determine if it is in weight% or mol%.",
+            EXTRACT_DATA,
             partial_variables={"format_instructions": parser.get_format_instructions()},
         ),
         HumanMessagePromptTemplate.from_template(
-            "OCR Text: {ocr_text}\nImages: {images}",
-            partial_variables={"ocr_text": state.ocr_text, "images": state.images},
+            "OCR Text: {ocr_text}",
+            partial_variables={"ocr_text": current_table["content"]},
             type="text",
         ),
     ]
+    # add all pages that cover parts of table t
+    for p_nr in current_table["pages"]:
+        img_base64 = state.pages[p_nr]["base64"]
+        add_base64image_to_messages(messages, img_base64)
 
     prompts = ChatPromptTemplate(messages=messages)
     chain = prompts | llm | parser
@@ -72,67 +88,63 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
         resp = chain.invoke({})
     except BadRequestError as e:
         if e.code == "content_filter":
-            print(f"Content filter error during LLM processing for document '{path}'")
+            print(f"Content filter error during LLM processing for table '{current_idx}'")
             resp = TableDataResult(
                 table_data=[],
                 is_weight_percent=False,
             ).model_dump()
         else:
             raise e
+    update_tables = copy.deepcopy(state.tables)
+    update_tables[current_idx]["extracted_data"] = resp # is a dictionary
+    return Command(update={"tables": update_tables, "curr_table_idx": current_idx}, goto="verify_table_data")
 
-    return Command(update={"table_data_result": resp}, goto="verify_table_data")
 
-
-def _verify_table_data(state: ExtractTableDataState) -> Command[Literal["save_table_data", "retry_extract_table_data"]]:
+def _verify_table_data(state: ExtractTableDataState) -> Command[Literal["extract_table_data"]]:
     """Verifies the extracted table data using an LLM."""
-    info = state.table_data_result
-    parser = JsonOutputParser(pydantic_object=TableDataResult)
+    
+    # limit of re-extraction trials
+    max_n_retries = 3
+    # initial value of the counter
+    init_val_for_retry_counter = 1
+
+    # too many re-extraction trials -> go back directly
+    if state.retry_counter >= max_n_retries:
+        # leave without doing anything (clear feedback, reset counter)
+        return Command(update={"feedback":None, "retry_counter":init_val_for_retry_counter}, goto="extract_table_data")
+
+    # start verification
+    current_idx = state.curr_table_idx
+    current_table = state.tables[current_idx]
+    curr_retry_counter = state.retry_counter
+
+    
+    parser = JsonOutputParser(pydantic_object=VerifyExtractionResult)
     prompts = ChatPromptTemplate(
         [
             SystemMessagePromptTemplate.from_template(
-                "Verify the extracted table data and its metadata.",
+                VERIFY_DATA,
                 partial_variables={"format_instructions": parser.get_format_instructions()},
             ),
             HumanMessagePromptTemplate.from_template(
-                "Table Data: {table_data}\nIs Weight Percent: {is_weight_percent}",
-                partial_variables={"table_data": info.table_data, "is_weight_percent": info.is_weight_percent},
+                "Table Data: {table_data}: ",
+                partial_variables={"table_data": current_table},
                 type="text",
             ),
         ]
     )
+
     chain = prompts | llm | parser
     resp = chain.invoke({})
-    resp = TableDataResult.model_validate(resp)
-    if resp.is_weight_percent is not None:
-        return Command(update={"confidence": "VERIFIED"}, goto="save_table_data")
+    resp = VerifyExtractionResult.model_validate(resp)
+    # decide whether a repeated extraction is required
+    if resp.reextraction_necessary:
+        # repeat extraction for this table (return verification feedback; increase counter)
+        return Command(update={"feedback":resp.feedback, "retry_counter":curr_retry_counter+1}, goto="extract_table_data")
     else:
-        if state.retried:
-            print("Confidence not high enough and already retried, ending extraction")
-            return Command(update={"confidence": "UNSURE"}, goto=END)
-
-        print("Confidence not high enough, retrying extraction")
-        return Command(update={"confidence": "UNSURE"}, goto="retry_extract_table_data")
-
-
-def _retry_extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify_table_data"]]:
-    """Retries the table data extraction with a reason for failure."""
-    parser = JsonOutputParser(pydantic_object=TableDataResult)
-    path = state.doc_path
-    messages = [
-        SystemMessagePromptTemplate.from_template(
-            "Retry extracting table data and determine if it is in weight% or mol%.",
-            partial_variables={"format_instructions": parser.get_format_instructions()},
-        ),
-        HumanMessagePromptTemplate.from_template(
-            "OCR Text: {ocr_text}\nImages: {images}\nReason: {reason}",
-            partial_variables={"ocr_text": state.ocr_text, "images": state.images, "reason": state.reason},
-            type="text",
-        ),
-    ]
-    prompts = ChatPromptTemplate(messages=messages)
-    chain = prompts | llm | parser
-    resp = chain.invoke({})
-    return Command(update={"table_data_result": resp, "retried": True}, goto="verify_table_data")
+        # extract data for another table (reset feedback and counter)
+        return Command(update={"feedback":None, "retry_counter":init_val_for_retry_counter}, goto="extract_table_data")
+        
 
 
 def save_table_data(state: ExtractTableDataState) -> Command[Literal["__end__"]]:
@@ -177,36 +189,44 @@ def construct_extract_table_data():
     workflow.add_node("init", _init)
     workflow.add_node("extract_table_data", _extract_table_data)
     workflow.add_node("verify_table_data", _verify_table_data)
-    workflow.add_node("retry_extract_table_data", _retry_extract_table_data)
     workflow.add_node("save_table_data", save_table_data)
 
     workflow.add_edge(START, "init")
     graph = workflow.compile()
 
-    bytes = graph.get_graph().draw_mermaid_png()
-    with open("extract_table_data.png", "wb") as f:
-        f.write(bytes)
+    #bytes = graph.get_graph().draw_mermaid_png()
+    #with open("extract_table_data.png", "wb") as f:
+    #    f.write(bytes)
 
     return graph
 
-def my_mock():
-    def load_from_pickle(filename):  
-        with open(filename, 'rb') as file:  
+
+def my_mock() -> ExtractTableDataState:
+
+    def load_from_pickle(filename): 
+        with open(filename, 'rb') as file: 
             data = pickle.load(file)  
         return data  
 
-    # Load the `pages` object from the pickle file  
-    pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')  
-    page_6 = pages[5]
-    #page_6_img_base64 = page_6
-
     # Load the `tables` object from the pickle file  
     tables = load_from_pickle('mock_tabledata/56388722_us2015274579_tables1.pkl') 
-    table_05 = tables[5]
+    table_05 = tables[5]["content"]
+    table_05_pages = tables[5]["pages"]
+
+    # Load the `pages` object from the pickle file  
+    pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')
+    base64_pages_for_tab = [pages[p]["base64"] for p in table_05_pages]
+
+    for t in tables:
+        t["extracted_data"] = None
+
+    mock_state = ExtractTableDataState(pages=pages, tables=tables)
+    return mock_state
+
 
 def main_url():
     graph = construct_extract_table_data()
-    state = mock_extract_table_data_state()
+    state = my_mock()
     _ = graph.invoke(state)
 
 
