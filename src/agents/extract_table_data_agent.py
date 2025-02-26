@@ -37,6 +37,10 @@ class VerifyExtractionResult(BaseModel):
 
 def _init(state: ExtractTableDataState) -> Command[Literal["extract_table_data"]]:
     # nothing to do since everything is already in the state
+    if os.getenv("SKIP_STEP_2") == "True":
+        with open('data/step2.pkl', 'rb') as f:
+            state = pickle.load(f)
+        return Command(update=state, goto=END)
     return Command(update={}, goto="extract_table_data")
 
 
@@ -68,6 +72,9 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
 
     # data for all tables is extracted
     if current_table is None:
+        if os.getenv("SKIP_STEP_2") == "False":
+            with open('data/step2.pkl', 'wb') as f:  # open a text file
+                pickle.dump(state, f) # serialize the list
         return Command(update={}, goto=END)
     
     # extract data for current table
