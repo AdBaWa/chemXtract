@@ -266,3 +266,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/python,windows,macos,dotenv,venv,visualstudiocode
+
+
+# Ignore files in these folders
+input_data/
+output_data/
+background_info/

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Annotated, List
 import operator
-
+from typing import Dict, Any
 
 class MainInfo(BaseModel):
     supplier: str = ""
@@ -12,6 +12,9 @@ class MainInfo(BaseModel):
 class BaseState(BaseModel):
     doc_path: str = ""
     error: str = ""
+    pdf_page_images: list[str] = []
+    pages: list[Dict[str, Any]] = []
+    tables: list[Dict[str, Any]] = []
     input_tokens: Annotated[int, operator.add] = 0
     output_tokens: Annotated[int, operator.add] = 0
 
@@ -34,3 +37,8 @@ class ExtractTableDataState(BaseState):
     confidence: str = ""
     reason: str = ""
     retried: bool = False
+
+
+class TableNormingState(BaseState):
+    table_data: dict = None
+    normalized_table: dict = None

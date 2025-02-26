@@ -54,3 +54,5 @@ urllib3==2.3.0
 yarl==1.18.3
 zstandard==0.23.0
 azure-storage-blob>=12.24.1
+pdf2image>=1.17.0
+pymupdf>=1.25.3

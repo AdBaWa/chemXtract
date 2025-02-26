@@ -60,3 +60,5 @@ Requires-Dist: urllib3==2.3.0
 Requires-Dist: yarl==1.18.3
 Requires-Dist: zstandard==0.23.0
 Requires-Dist: azure-storage-blob>=12.24.1
+Requires-Dist: pdf2image>=1.17.0
+Requires-Dist: pymupdf>=1.25.3
