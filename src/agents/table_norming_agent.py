@@ -1,6 +1,6 @@
 import json  
 from pathlib import Path  
-from typing import Dict, List, Literal, Optional, Any  
+from typing import Dict, List, Literal, Optional, Any, Union 
 from pydantic import BaseModel, Field  
 from langchain_core.output_parsers import JsonOutputParser  
 from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate  
@@ -16,14 +16,19 @@ class TableDataResult(BaseModel):
     table_data: List[List[str]] = Field(description="The structured table data.")  
     is_weight_percent: bool = Field(description="True if the table data is in weight%, False if in mol%. Or NaN if you are unsure.")  
   
-  
-class NormalizedTableResult(BaseModel):  
-    familyNumber: int  
-    patentNumber: int  
-    title: str  
-    applicant: str  
-    tables: List[Dict[str, Any]] = Field(description="The normalized table data associated with pages and examples.")  
-  
+
+class MoleculeResult(BaseModel):
+    element: str = Field(description="The element name.")
+    min: Optional[Union[str, None]] = Field(description="The minimum value.")
+    max: Optional[Union[str, None]] = Field(description="The maximum value.")
+
+class ExampleResult(BaseModel):
+    exampleNumber: str = Field(description="The example number.")
+    molecules: List[MoleculeResult] = Field(description="The list of molecules with their min and max values.")
+
+class NormalizedTableResult(BaseModel):
+    examples: List[ExampleResult] = Field(description="The list of examples in the table data.")
+
   
 class TableNormingState(BaseModel):  
     doc_path: str  
@@ -67,9 +72,11 @@ def _normalize_table(state: TableNormingState) -> Command[Literal["save_normaliz
             ),  
             HumanMessagePromptTemplate.from_template(  
                 TABLE_NORMING_USER_PROMPT,  
-                partial_variables={"table_data": table_data}  
-            )  
-        ]  
+                partial_variables={"table_data": table_data}
+            ) ]
+
+
+
         chain = ChatPromptTemplate(messages=messages) | llm | parser  
         parsed_resp = chain.invoke({})  
   
@@ -90,8 +97,7 @@ def save_normalized_table(state: TableNormingState) -> Command[Literal["__end__"
         # Save normalized table with abnormal material details  
         data = {  
             "normalized_table": state.normalized_table.model_dump(),  
-            "abnormal_material": state.abnormal_material,  
-            "abnormal_details": state.abnormal_details  
+
         }  
         output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")  
         return Command(goto=END)  
@@ -123,18 +129,14 @@ def main():
     state_graph = construct_table_norming()  
     state = TableNormingState(doc_path="input_data/test_horizontal.json")  
   
-    while True:  
-        # Convert the state to a dictionary for update_state  
-        state_dict = state.model_dump()  # Use .dict() for older Pydantic versions  
-        command_dict = state_graph.invoke(state_dict)  
-          
-        if command_dict.get("goto") == END:  
-            break  
-          
-        # Convert the updated state back to a Pydantic model  
-        updated_state_dict = command_dict.get("update", {})  
-        state = TableNormingState(**{**state_dict, **updated_state_dict})    
-  
+    # Convert the state to a dictionary for update_state  
+    state_dict = state.model_dump()  # Use .dict() for older Pydantic versions  
+    command_dict = state_graph.invoke(state_dict) 
+        
+    # Convert the updated state back to a Pydantic model  
+    updated_state_dict = command_dict.get("update", {})  
+    state = TableNormingState(**{**state_dict, **updated_state_dict})    
+
   
 if __name__ == "__main__":  
     main()  

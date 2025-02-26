@@ -5,11 +5,11 @@ Key rules:
 1. **Preserve Association**: Each table is associated with one or more pages. Maintain this association in the normalized output.  
 2. **Preserve or Represent Symbols**:  
    - If a value contains `<x`:  
-     - This means "less than x."  
-     - Set `max` to x and leave `min` as null or empty.  
+   - This means "less than x."  
+   - Set `max` to x and leave `min` as null or empty.  
    - If a value contains `>x`:  
-     - This means "greater than x."  
-     - Set `min` to x and leave `max` as null or empty.  
+   - This means "greater than x."  
+   - Set `min` to x and leave `max` as null or empty.  
    - If the value is a normal number (e.g., `3.5`), set both `min` and `max` to the same value.  
    - Ensure all numerical values use **German decimal notation** (e.g., `1.50` becomes `1,50`).  
 3. **Table Orientation**: Determine if the table is vertically or horizontally oriented:  
@@ -18,59 +18,31 @@ Key rules:
 4. **Normalize Structure**: Convert each table into a structured JSON format. The normalized structure must include the `pages` associated with the table, the table's `content`, and its `normalized` molecules.  
 5. **Material Validation**: Verify that the material elements (e.g., "SiO2", "Al2O3") match a predefined list of valid elements. Flag any unknown elements for review.  
   
+
+Example:
+["SiO2", "Al2O3", "B2O3"],  
+["1", "<65.8", ">19.9"]
+
+Should be normalized to:
+element: SiO2
+min: 1
+max: 1
+element: Al2O3
+min: null
+max: 65.8
+element: B2O3
+min: 19.9
+max: null
+
+
+
+
 Output Format:  
-Your output must follow this structured JSON format:  
-[  
-  {  
-    "familyNumber": {family_number},  
-    "patentNumber": {patent_number},  
-    "title": {title},  
-    "applicant": {applicant},  
-    "tables": [  
-      {  
-        "pages": [1, 2],  
-        "normalized": [  
-          {  
-            "exampleNumber": "1",  
-            "molecules": [  
-              {  
-                "element": "SiO2",  
-                "min": "65,80",  
-                "max": "65,80"  
-              },  
-              {  
-                "element": "Al2O3",  
-                "min": "19,90",  
-                "max": "19,90"  
-              },  
-              {  
-                "element": "Se",  
-                "min": null,  
-                "max": "0,0005"  
-              },  
-              {  
-                "element": "Cr2O3",  
-                "min": null,  
-                "max": "0,0003"  
-              }  
-            ]  
-          }  
-        ]  
-      }  
-    ]  
-  }  
-]  
+{format_instructions}
 """ 
 
 TABLE_NORMING_USER_PROMPT = """  
 ### INPUT DATA ###  
-{input_json}  
-  
-### METADATA ###  
-familyNumber: {family_number}  
-patentNumber: {patent_number}  
-title: {title}  
-applicant: {applicant}  
-  
+{table_data}  
 Normalize the table data and map it into the structured JSON format as described in the system prompt.  
 """  
