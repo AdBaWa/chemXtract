@@ -17,7 +17,6 @@ Key rules:
    - If the first column contains column headers and the first row contains row headers, treat it as a horizontal table.  
 4. **Normalize Structure**: Convert each table into a structured JSON format. The normalized structure must include the `pages` associated with the table, the table's `content`, and its `normalized` molecules.  
 5. **Material Validation**: Verify that the material elements (e.g., "SiO2", "Al2O3") match a predefined list of valid elements. Flag any unknown elements for review.  
-  
 
 Example:
 ["SiO2", "Al2O3", "B2O3"],  
@@ -33,9 +32,6 @@ element: Al2O3
 element: B2O3
   min: 19.9
   max: null
-
-
-
 
 Output Format:  
 {format_instructions}

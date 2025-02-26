@@ -28,7 +28,6 @@ class ExampleResult(BaseModel):
 
 class NormalizedTableResult(BaseModel):
     examples: List[ExampleResult] = Field(description="The list of examples in the table data.")
-
   
 class TableNormingState(BaseModel):  
     doc_path: str  
