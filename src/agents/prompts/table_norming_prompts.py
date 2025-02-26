@@ -5,11 +5,11 @@ Key rules:
 1. **Preserve Association**: Each table is associated with one or more pages. Maintain this association in the normalized output.  
 2. **Preserve or Represent Symbols**:  
    - If a value contains `<x`:  
-   - This means "less than x."  
-   - Set `max` to x and leave `min` as null or empty.  
+     - This means "less than x."  
+     - Set `max` to x and leave `min` as null or empty.  
    - If a value contains `>x`:  
-   - This means "greater than x."  
-   - Set `min` to x and leave `max` as null or empty.  
+     - This means "greater than x."  
+     - Set `min` to x and leave `max` as null or empty.  
    - If the value is a normal number (e.g., `3.5`), set both `min` and `max` to the same value.  
    - Ensure all numerical values use **German decimal notation** (e.g., `1.50` becomes `1,50`).  
 3. **Table Orientation**: Determine if the table is vertically or horizontally oriented:  
@@ -25,14 +25,14 @@ Example:
 
 Should be normalized to:
 element: SiO2
-min: 1
-max: 1
+  min: 1
+  max: 1
 element: Al2O3
-min: null
-max: 65.8
+  min: null
+  max: 65.8
 element: B2O3
-min: 19.9
-max: null
+  min: 19.9
+  max: null
 
 
 

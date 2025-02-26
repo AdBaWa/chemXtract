@@ -127,7 +127,7 @@ def construct_table_norming() -> StateGraph:
 # Main function to execute the workflow  
 def main():  
     state_graph = construct_table_norming()  
-    state = TableNormingState(doc_path="input_data/test_horizontal.json")  
+    state = TableNormingState(doc_path="input_data/test_vertikal.json")  
   
     # Convert the state to a dictionary for update_state  
     state_dict = state.model_dump()  # Use .dict() for older Pydantic versions  
