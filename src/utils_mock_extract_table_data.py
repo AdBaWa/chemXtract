@@ -28,6 +28,27 @@ def mock_extract_table_data_state() -> ExtractTableDataState:
                                                     confidence= None,
                                                     reason=None,
                                                     retried=False)
-    
-if __name__ == "__main__":
-    mock_extract_table_data_state()
+
+
+def load_from_pickle(filename):  
+    with open(filename, 'rb') as file:  
+        data = pickle.load(file)  
+    return data  
+
+# Load the `pages` object from the pickle file  
+pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')
+page_6 = pages[5]  
+
+# Load the `tables` object from the pickle file  
+tables = load_from_pickle('mock_tabledata/56388722_us2015274579_tables1.pkl')  
+table_05 = tables[5]
+
+# Example usage: print the loaded data  
+#print("Loaded pages:", pages)  
+#print("Loaded tables:", tables)
+
+print("test")  
+
+
+#if __name__ == "__main__":
+#    mock_extract_table_data_state()

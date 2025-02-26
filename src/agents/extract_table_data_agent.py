@@ -189,6 +189,20 @@ def construct_extract_table_data():
 
     return graph
 
+def my_mock():
+    def load_from_pickle(filename):  
+        with open(filename, 'rb') as file:  
+            data = pickle.load(file)  
+        return data  
+
+    # Load the `pages` object from the pickle file  
+    pages = load_from_pickle('mock_tabledata/56388722_us2015274579_pages1.pkl')  
+    page_6 = pages[5]
+
+    # Load the `tables` object from the pickle file  
+    tables = load_from_pickle('mock_tabledata/56388722_us2015274579_tables1.pkl') 
+    table_05 = tables[5]
+
 def main_url():
     graph = construct_extract_table_data()
     state = mock_extract_table_data_state()
