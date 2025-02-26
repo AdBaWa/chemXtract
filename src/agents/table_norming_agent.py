@@ -15,7 +15,8 @@ from agents.prompts.table_norming_prompts import (
     TABLE_NORMING_USER_PROMPT,
 )
 from utils import llm
-
+from model import BaseState
+import copy
 
 # Step 2 -> Step 3: Define models
 class TableDataResult(BaseModel):
@@ -46,15 +47,17 @@ class NormalizedTableResult(BaseModel):
     )
 
 
-class TableNormingState(BaseModel):
+class TableNormingState(BaseState):
     doc_path: str
-    table_data: Optional[Dict[str, Any]] = None  # Adjusted to match input structure
     normalized_table: Optional[NormalizedTableResult] = None
     error: Optional[str] = None
 
 
 # State functions
 def _init(state: TableNormingState) -> Command[Literal["normalize_table"]]:
+    return Command(update={}, goto="normalize_table")
+
+def _init_old(state: TableNormingState) -> Command[Literal["normalize_table"]]:
     json_file_path = Path("input_data") / f"{Path(state.doc_path).stem}.json"
 
     try:
@@ -75,41 +78,46 @@ def _init(state: TableNormingState) -> Command[Literal["normalize_table"]]:
 def _normalize_table(
     state: TableNormingState,
 ) -> Command[Literal["save_normalized_table", "__end__"]]:
-    if state.error or not state.table_data:
+    if state.error or not state.tables:
         return Command(update={"error": "No valid table data to normalize"}, goto=END)
 
     parser = JsonOutputParser(pydantic_object=NormalizedTableResult)
     try:
+        new_tables = []
         # Prepare input data for normalization
-        table_data = state.table_data.get("tables", [])
-        pages = state.table_data.get("pages", [])
+        for table in state.tables:
+            table_data = table["extracted_data"]
 
-        # Use TABLE_NORMING prompts to normalize tables
-        messages = [
-            SystemMessagePromptTemplate.from_template(
-                TABLE_NORMING_SYSTEM_PROMPT,
-                partial_variables={
-                    "format_instructions": parser.get_format_instructions()
-                },
-            ),
-            HumanMessagePromptTemplate.from_template(
-                TABLE_NORMING_USER_PROMPT, partial_variables={"table_data": table_data}
-            ),
-        ]
+            # Use TABLE_NORMING prompts to normalize tables
+            messages = [
+                SystemMessagePromptTemplate.from_template(
+                    TABLE_NORMING_SYSTEM_PROMPT,
+                    partial_variables={
+                        "format_instructions": parser.get_format_instructions()
+                    },
+                ),
+                HumanMessagePromptTemplate.from_template(
+                    TABLE_NORMING_USER_PROMPT, partial_variables={"table_data": table_data}
+                ),
+            ]
 
-        chain = ChatPromptTemplate(messages=messages) | llm | parser
-        parsed_resp = chain.invoke({})
+            chain = ChatPromptTemplate(messages=messages) | llm | parser
+            
+            parsed_resp = chain.invoke({})
+            new_table = copy.deepcopy(table)
+            new_table["normalized"] = parsed_resp
+            new_tables.append(new_table)
 
         # Add normalized table response back to state
         return Command(
-            update={"normalized_table": parsed_resp}, goto="save_normalized_table"
+            update={"tables": new_tables}, goto="save_normalized_table"
         )
     except Exception as e:
         return Command(update={"error": str(e)}, goto=END)
 
 
 def save_normalized_table(state: TableNormingState) -> Command[Literal["__end__"]]:
-    if not state.normalized_table:
+    if not state.tables:
         return Command(goto=END)
 
     try:
@@ -120,7 +128,7 @@ def save_normalized_table(state: TableNormingState) -> Command[Literal["__end__"
 
         # Save normalized table with abnormal material details
         data = {
-            "normalized_table": state.normalized_table.model_dump(),
+            "normalized_table": state.tables,
         }
         output_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
