@@ -5,19 +5,31 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from azure.ai.documentintelligence.models import AnalyzeResult, AnalyzeDocumentRequest
-from handler.ocr_processor_client import DocumentIntelligenceAuth, OCRProcessor
 from model import BaseState
+from pydantic import BaseModel, Field
 from util_functions import pdf_to_base64_images
 import os
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+from util_functions import add_base64image_to_messages
 from azure.core.credentials import AzureKeyCredential
+from agents.prompts.extract_table_prompt import DETECT_CONTINUOUS_TABLES_SYSTEM_PROMPT, DETECT_CONTINUOUS_TABLES_USER_PROMPT
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from dotenv import load_dotenv
+from utils import llm
+
 load_dotenv()
 
-doc_int_auth = DocumentIntelligenceAuth()
-doc_int_client = doc_int_auth.get_client()
-ocr_processor = OCRProcessor(doc_int_client)
 
+class CheckContinuousTableResult(BaseModel):
+    """Represents the result of a verification, including a status and reason."""
+
+    result: str = Field(description="One of the following options: CONTINUOUS or DISTINCT. Do not write anything else than one of these options.")
+    reason: str = Field(description="Outline your reasoning.")
 
 def _init(
     state: BaseState,
@@ -160,15 +172,77 @@ def _extract_tables_and_page_contents(
     for table_index, table in enumerate(analyze_result.tables):
         table_number = table_index
         table_content = get_table_content(get_table(analyze_result, table_index))
-        tables.append({"number": table_number, "content": table_content, "pages": [get_table_page(analyze_result, table_index)]})
+        tables.append({"number": table_number, "content": table_content, "pages": [get_table_page(analyze_result, table_index)-1]})
 
     return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
+
+def add_merged_table(tables, tables_to_merge):
+    """Merge tables that belong together"""
+    table = {"number": len(tables),
+             "content": "\n".join(table["content"] for table in tables_to_merge),
+             "pages": list(table["pages"][0] for table in tables_to_merge)
+            }
+    tables.append(table)
 
 def _concatenate_tables(
     state: BaseState,
 ) -> Command[Literal["filter_irrelevant_tables"]]:
     """Concatenates tables which belong together"""
-    pass
+    tables = []
+    pages = state.pages
+    table_index = 0
+    
+    while table_index < len(state.tables):
+        tables_to_merge = [state.tables[table_index]]
+        table_index += 1
+        
+        while table_index < len(state.tables):
+            if tables_to_merge[-1]["pages"][0] + 1 == state.tables[table_index]["pages"][0]:
+                last_page = tables_to_merge[-1]["pages"][0]
+                tables_spills_to_next_page = check_if_table_spills(state.pdf_page_images[last_page], state.pdf_page_images[last_page + 1])
+                
+                if tables_spills_to_next_page:
+                    add_merged_table(tables, tables_to_merge)
+                    table_index += 1
+                else:
+                    add_merged_table(tables, tables_to_merge)
+                    break
+            else:
+                add_merged_table(tables, tables_to_merge)
+                break
+                
+                
+        if table_index == len(state.tables):
+            add_merged_table(tables, tables_to_merge)
+    
+    return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
+    
+
+
+def check_if_table_spills(page1, page2):
+    parser = JsonOutputParser(pydantic_object=CheckContinuousTableResult)
+    messages = ChatPromptTemplate(
+        [
+            SystemMessagePromptTemplate.from_template(
+                DETECT_CONTINUOUS_TABLES_SYSTEM_PROMPT,
+                partial_variables={"format_instructions": parser.get_format_instructions()},
+            ),
+            HumanMessagePromptTemplate.from_template(
+                DETECT_CONTINUOUS_TABLES_USER_PROMPT,
+                partial_variables={"pages": page1},
+                type="text",
+            ),
+        ]
+    )
+    
+    add_base64image_to_messages(messages, page1)
+    add_base64image_to_messages(messages, page2)
+    
+    chain = messages | llm | parser
+    resp = chain.invoke({})
+    resp = CheckContinuousTableResult.model_validate(resp)
+    
+    return resp.result == "CONTINUOUS"
 
 def _filter_irrelevant_tables(
     state: BaseState,

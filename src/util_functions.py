@@ -70,7 +70,16 @@ def convert_image_to_base64_from_disk(image_path: str) -> str:
     except Exception as e:
         raise Exception(f"Error converting image to base64: {e}")
 
-
+def add_base64image_to_messages(messages, image_base64: str):
+    url = ImagePromptTemplate().format(url=image_base64)  # Format for base64 input
+    msg = HumanMessagePromptTemplate.from_template(
+        template=[
+            {"type": "image_url", "image_url": url},
+        ]
+    )
+    messages.append(msg)
+    
+    
 def add_file_content_to_messages(messages, image_path: str):
     """
     Adds image content from a local file or a public URL to messages.
