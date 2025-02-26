@@ -34,7 +34,7 @@ class ExtractTableDataState(BaseState):
     #ocr_text: str = "" # tables
     #images: List[str] = [] # pages
     #table_data_result: dict = {} # --> subfield of tables ("extracted_data"), type: TableDataResult
-    feedback: str = None
+    feedback: str|None = None
     retry_counter: int = 1
     curr_table_idx: int = None
     #confidence: str = ""
