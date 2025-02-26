@@ -3,7 +3,11 @@ from io import BytesIO
 from PIL import Image
 from langchain_core.prompts.image import ImagePromptTemplate
 from langchain_core.prompts import HumanMessagePromptTemplate
-
+import base64
+from io import BytesIO
+from PIL import Image
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 def get_mime_type(fmt):
     """Get MIME type for a given image format.
@@ -69,7 +73,16 @@ def convert_image_to_base64_from_disk(image_path: str, dataUrl: bool) -> str:
     except Exception as e:
         raise Exception(f"Error converting image to base64: {e}")
 
-
+def add_base64image_to_messages(messages, image_base64: str):
+    url = ImagePromptTemplate().format(url=image_base64)  # Format for base64 input
+    msg = HumanMessagePromptTemplate.from_template(
+        template=[
+            {"type": "image_url", "image_url": url},
+        ]
+    )
+    messages.append(msg)
+    
+    
 def add_file_content_to_messages(messages, image_path: str):
     """
     Adds image content from a local file or a public URL to messages.
@@ -106,3 +119,33 @@ def add_file_content_to_messages(messages, image_path: str):
         raise ValueError(f"Unsupported input type. Provide a PNG/JPEG file path or a public image URL: {image_path}")
 
     return messages
+
+def pdf_to_base64_images(pdf_bytes, dpi=200, fmt="jpeg", poppler_path=None):
+    """Convert PDF bytes to a list of base64 data URLs (one per page).
+
+    Args:
+        pdf_bytes: Bytes of the PDF file.
+        dpi: DPI for rendering images.
+        fmt: Image format for output ('jpeg', 'png', 'ppm').
+        poppler_path: Path to poppler bin directory (if needed).
+
+    Returns:
+        List of base64 data URL strings, one per page. Returns empty list on error.
+    """
+    base64_images = []
+    try:
+        images = convert_from_bytes(pdf_bytes, dpi=dpi, fmt=fmt, poppler_path=poppler_path)
+        mime_type = get_mime_type(fmt)
+        data_url_prefix = f"data:{mime_type};base64,"
+
+        for image in images:
+            buffered = BytesIO()
+            image.save(buffered, format=fmt.upper())
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            base64_images.append(f"{data_url_prefix}{img_str}")
+
+    except Exception as e:
+        print(f"Error converting PDF to images: {e}")
+        return []
+
+    return base64_images 

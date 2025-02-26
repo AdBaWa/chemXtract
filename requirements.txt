@@ -7,9 +7,13 @@ attrs==25.1.0
 azure-ai-documentintelligence==1.0.0
 azure-core==1.32.0
 azure-cosmos==4.9.0
+azure-storage-blob==12.24.1
 certifi==2025.1.31
+cffi==1.17.1
 charset-normalizer==3.4.1
+cryptography==44.0.1
 distro==1.9.0
+-e file:///Users/lobst/Projects/chemXtract
 frozenlist==1.5.0
 greenlet==3.1.1
 h11==0.14.0
@@ -34,11 +38,14 @@ numpy==2.2.3
 openai==1.63.2
 orjson==3.10.15
 packaging==24.2
+pdf2image==1.17.0
 pillow==11.1.0
 pandas==2.2.3
 propcache==0.3.0
+pycparser==2.22
 pydantic==2.10.6
 pydantic-core==2.27.2
+pymupdf==1.25.3
 python-dotenv==1.0.1
 pyyaml==6.0.2
 regex==2024.11.6
