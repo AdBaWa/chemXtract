@@ -40,7 +40,7 @@ def _perform_ocr(
         extracted_text = ocr_processor.extract_text_from_url(doc_path)
     else:
         # TODO: Currently failes due to Invalid Request Error; Code: Invalid Content; Message: File is corrupted or format unsupported...
-        base64_image = convert_image_to_base64_from_disk(doc_path)
+        base64_image = convert_image_to_base64_from_disk(doc_path, False)
         extracted_text = ocr_processor.extract_text_from_base64_image(base64_image)
 
     return Command(

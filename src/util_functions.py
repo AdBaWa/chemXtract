@@ -28,7 +28,7 @@ def get_mime_type(fmt):
         raise ValueError(f"Unsupported image format for data URL: {fmt}")
 
 
-def image_bytes_to_base64(image_bytes):
+def image_bytes_to_base64(image_bytes, dataUrl: bool):
     """Convert image bytes to a base64 data URL string.
 
     Args:
@@ -44,10 +44,13 @@ def image_bytes_to_base64(image_bytes):
     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
     mime_type = get_mime_type(image.format)
     data_url_prefix = f"data:{mime_type};base64,"
-    return f"{img_str}"
+    if dataUrl:
+        return f"{data_url_prefix}{img_str}"
+    else:
+        return f"{img_str}"
 
 
-def convert_image_to_base64_from_disk(image_path: str) -> str:
+def convert_image_to_base64_from_disk(image_path: str, dataUrl: bool) -> str:
     """
     Converts an image from disk to a base64 data URL.
 
@@ -60,7 +63,7 @@ def convert_image_to_base64_from_disk(image_path: str) -> str:
     try:
         with open(image_path, "rb") as image_file:
             image_bytes = image_file.read()
-        return image_bytes_to_base64(image_bytes)
+        return image_bytes_to_base64(image_bytes, dataUrl)
     except FileNotFoundError:
         raise FileNotFoundError(f"Image file not found: {image_path}")
     except Exception as e:
@@ -89,7 +92,7 @@ def add_file_content_to_messages(messages, image_path: str):
         messages.append(msg)
     elif image_path.lower().endswith((".png", ".jpg", ".jpeg")):
         try:
-            image_base64 = convert_image_to_base64_from_disk(image_path)
+            image_base64 = convert_image_to_base64_from_disk(image_path, True)
             url = ImagePromptTemplate().format(url=image_base64)  # Format for base64 input
             msg = HumanMessagePromptTemplate.from_template(
                 template=[
