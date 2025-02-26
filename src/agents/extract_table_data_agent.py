@@ -50,6 +50,11 @@ def _extract_table_data(state: ExtractTableDataState) -> Command[Literal["verify
     if state.feedback is None:
         # take a new table and extract data
         for i,t in enumerate(state.tables):
+            try:
+                t["extracted_data"]
+            except:
+                t["extracted_data"] = None
+                
             if not t["extracted_data"] is None:
                 continue
             # if still data to extract
