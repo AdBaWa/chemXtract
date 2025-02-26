@@ -22,6 +22,7 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from dotenv import load_dotenv
 from utils import llm
 from langchain_core.prompts.image import ImagePromptTemplate
+import pickle
 
 
 load_dotenv()
@@ -43,6 +44,11 @@ def _init(
     state: BaseState,
 ) -> Command[Literal["pdf_to_base64_images", "__end__"]]:
     """Initializes the OCR process; checks for a document path."""
+    
+    if os.getenv("SKIP_STEP_1") == "True":
+        with open('data/step1.pkl', 'rb') as f:
+            state = pickle.load(f)
+        return Command(update=state, goto=END)
     
     if not state.doc_path:
         error_msg = "Document path is missing in the state."
@@ -230,7 +236,7 @@ def _concatenate_tables(
                 
         if table_index == len(state.tables):
             add_merged_table(tables, tables_to_merge, pages)
-    
+            
     return Command(update={"pages": pages, "tables": tables}, goto="filter_irrelevant_tables")
     
 
@@ -275,6 +281,12 @@ def _filter_irrelevant_tables(
 
     # Filter pages to only include those related to relevant tables
     relevant_pages = [state.pages[page_number] for page_number in sorted(relevant_pages_numbers)]
+
+    if os.getenv("SKIP_STEP_1") == "False":
+        state.tables = relevant_tables
+        state.pages = relevant_pages
+        with open('data/step1.pkl', 'wb') as f:  # open a text file
+            pickle.dump(state, f) # serialize the list
 
     # Update the state with the filtered tables and pages
     return Command(update={"tables": relevant_tables, "pages": relevant_pages}, goto=END)

@@ -3,7 +3,7 @@
 
 ### dotenv ###
 .env
-
+*.pkl
 ### macOS ###
 # General
 .DS_Store
