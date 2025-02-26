@@ -4,6 +4,27 @@ from agents.table_norming_agent import construct_table_norming
 from agents.extract_table_data_agent import construct_extract_table_data
 from model import BaseState
 import os
+import requests
+from openinference.instrumentation.langchain import LangChainInstrumentor
+from phoenix.otel import register
+
+# test for Phoenix by sending an http request to the Phoenix Dashboard
+url = "http://localhost:6006/v1/traces"
+success = True
+try:
+    response = requests.get(url)
+    success = response.status_code == 200
+except Exception:
+    success = False
+
+if success:
+    tracer_provider = register(
+        project_name="default",  # Default is 'default'
+        endpoint="http://localhost:6006/v1/traces",
+    )
+    LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
+else:
+    print("Failed to register Phoenix tracer.")
 
 
 def _construct_graph():
@@ -41,10 +62,10 @@ def main_local_files():
 
 
 def main():
-    pdfs = [#"data/56388722_us2015274579.pdf"
-            #"data/78071_DE1771318A1.pdf"
-            "data/80946226_cn111646693.pdf"
-            ]
+    pdfs = [  # "data/56388722_us2015274579.pdf"
+        # "data/78071_DE1771318A1.pdf"
+        "data/80946226_cn111646693.pdf"
+    ]
     graph = _construct_graph()
     for pdf in pdfs:
         state = BaseState(doc_path=pdf)
