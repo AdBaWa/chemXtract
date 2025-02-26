@@ -8,8 +8,8 @@ import os
 
 def _construct_graph():
     extract_tables_graph = construct_extract_table_agent()
-    table_norming_graph = construct_table_norming()
     extract_table_data_graph = construct_extract_table_data()
+    table_norming_graph = construct_table_norming()
 
     workflow = StateGraph(BaseState)
     workflow.add_node("extract_tables", extract_tables_graph)

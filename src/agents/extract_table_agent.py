@@ -223,7 +223,7 @@ def _concatenate_tables(
         if table_index == len(state.tables):
             add_merged_table(tables, tables_to_merge, pages)
     
-    return Command(update={"pages": pages, "tables": tables}, goto="concatenate_tables")
+    return Command(update={"pages": pages, "tables": tables}, goto="filter_irrelevant_tables")
     
 
 
