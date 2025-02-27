@@ -69,6 +69,8 @@ dependencies = [
     "pymupdf>=1.25.3",
     "langchain-azure-ai>=0.1.0",
     "pandas>=2.2.3",
+    "arize-phoenix-otel>=0.8.0",
+    "openinference-instrumentation-langchain>=0.1.33",
 ]
 
 [build-system]
